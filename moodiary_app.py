@@ -30,7 +30,7 @@ except FileNotFoundError:
 FINAL_EMOTIONS = ["행복", "슬픔", "분노", "힘듦", "놀람"]
 
 
-# --- 3. KoBERT 모델 로드 (trust_remote_code=True 추가) ---
+# --- 3. KoBERT 모델 로드 (num_labels=6 강제) ---
 @st.cache_resource
 def load_kobert_model():
     """
@@ -39,7 +39,6 @@ def load_kobert_model():
     """
     try:
         # 1. ⭐️ 원본(monologg/kobert)에서 올바른 Config와 Tokenizer를 불러옵니다.
-        #    trust_remote_code=True 플래그를 추가합니다.
         config = AutoConfig.from_pretrained(
             KOBERT_BASE_MODEL, 
             trust_remote_code=True
@@ -49,8 +48,20 @@ def load_kobert_model():
             trust_remote_code=True
         )
         
-        # 2. ⭐️ 고객님의 저장소(Young-jin/...)에서 모델을 로드하되,
-        #    원본 config와 trust_remote_code=True 플래그를 사용합니다.
+        # 2. ⭐️⭐️⭐️ 중요: 원본 config를 수정하여, 레이블 개수를 6개로 강제합니다. ⭐️⭐️⭐️
+        # (이전 모델의 2개 레이블 대신, 사용자가 파인튜닝한 6개 감정)
+        # 또한, 라벨 맵핑을 여기서 직접 주입합니다.
+        CORRECT_ID_TO_LABEL = {
+            0: '분노', 1: '기쁨', 2: '불안', 
+            3: '당황', 4: '슬픔', 5: '상처'
+        }
+        config.num_labels = 6
+        config.id2label = CORRECT_ID_TO_LABEL
+        config.label2id = {label: id for id, label in CORRECT_ID_TO_LABEL.items()}
+
+
+        # 3. ⭐️ 이제 '6개 라벨'이 적용된 config로 모델을 로드합니다.
+        # 가중치는 고객님의 저장소(Young-jin/...)에서 가져옵니다.
         model = AutoModelForSequenceClassification.from_pretrained(
             KOBERT_SAVED_REPO, 
             config=config, 
@@ -60,7 +71,7 @@ def load_kobert_model():
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         model.to(device)
         
-        # 3. 모델 객체에서 후처리 맵핑을 불러옵니다.
+        # 4. 모델 config에서 후처리 맵핑을 불러옵니다.
         post_processing_map = getattr(model.config, 'post_processing_map', None)
         
         if post_processing_map is None:
@@ -252,7 +263,6 @@ with st.expander("⚙️ 시스템 상태 확인"):
     else:
         st.error("❗️ AI 모델 로드를 실패했습니다.")
 
-    # ⭐️ 이 부분은 secrets.toml 파일이 올바르게 있어야 합니다.
     if st.secrets.get("connections", {}).get("gsheets"): st.success("✅ Google Sheets 인증 정보가 확인되었습니다.")
     else: st.error("❗️ Google Sheets 인증 정보('connections.gsheets')를 찾을 수 없습니다.")
     if st.secrets.get("spotify", {}).get("client_id"): st.success("✅ Spotify 인증 정보가 확인되었습니다.")
