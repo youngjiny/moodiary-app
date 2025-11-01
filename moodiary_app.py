@@ -8,80 +8,81 @@ from matplotlib import font_manager
 import random
 import spotipy
 from spotipy.oauth2 import SpotifyClientCredentials
-import requests  # TMDB API 호출
+import requests
 import torch
 from transformers import AutoModelForSequenceClassification, AutoTokenizer, AutoConfig
 
 # --- 2. 기본 설정 및 경로 ---
 
 # ⭐️⭐️⭐️ 핵심 변경 사항 ⭐️⭐️⭐️
-# 로컬 폴더 대신 Hugging Face Hub 저장소 주소를 사용합니다.
-KOBERT_MODEL_REPO = "Young-jin/kobert-moodiary-app"
+# KoBERT의 원본(Base)과 고객님의 저장소(Weights)를 분리합니다.
+KOBERT_BASE_MODEL = "monologg/kobert"
+KOBERT_SAVED_REPO = "Young-jin/kobert-moodiary-app" # 고객님의 fine-tuning된 가중치
 
 # TMDB API 설정 (Secrets에서 불러옴)
 TMDB_API_KEY = st.secrets.get("TMDB_API_KEY", "")
 TMDB_BASE_URL = "https://api.themoviedb.org/3"
 
-# 폰트 설정 (기존 앱 코드 유지)
+# 폰트 설정
 try:
-    # (Streamlit Cloud 환경에는 'malgun.ttf'가 없으므로 이 부분은 로컬에서만 작동합니다)
     font_path = "c:/Windows/Fonts/malgun.ttf"
     font_name = font_manager.FontProperties(fname=font_path).get_name()
     plt.rc('font', family=font_name)
 except FileNotFoundError:
-    # Streamlit Cloud에서는 이 경고가 항상 뜰 수 있으나, 작동에 문제는 없습니다.
     st.warning("Malgun Gothic 폰트를 찾을 수 없어 그래프의 한글이 깨질 수 있습니다.")
 
-# 최종 감정 체계 (KoBERT 모델의 최종 출력 기준)
 FINAL_EMOTIONS = ["행복", "슬픔", "분노", "힘듦", "놀람"]
 
 
-# --- 3. KoBERT 모델 로드 (Hugging Face에서 다운로드) ---
+# --- 3. KoBERT 모델 로드 (Size Mismatch 해결 버전) ---
 @st.cache_resource
 def load_kobert_model():
     """
-    Hugging Face Hub에서 KoBERT 모델, 토크나이저, 설정값을 로드합니다.
-    Streamlit Cloud 서버가 시작될 때 이 함수가 실행됩니다.
+    원본 KoBERT 아키텍처를 로드한 뒤,
+    Hugging Face Hub에 저장된 고객님의 가중치(weights)를 덮어씌웁니다.
     """
     try:
-        # ⭐️ 저장소 이름으로 모델/토크나이저/설정을 바로 불러옵니다.
-        config = AutoConfig.from_pretrained(KOBERT_MODEL_REPO)
-        model = AutoModelForSequenceClassification.from_pretrained(KOBERT_MODEL_REPO, config=config)
-        tokenizer = AutoTokenizer.from_pretrained(KOBERT_MODEL_REPO)
+        # 1. ⭐️ 원본(monologg/kobert)에서 올바른 Config와 Tokenizer를 불러옵니다.
+        #    이것이 8002개 단어 크기를 보장합니다.
+        config = AutoConfig.from_pretrained(KOBERT_BASE_MODEL)
+        tokenizer = AutoTokenizer.from_pretrained(KOBERT_BASE_MODEL)
         
-        # Streamlit Cloud 서버는 보통 CPU를 사용합니다.
+        # 2. ⭐️ 고객님의 저장소(Young-jin/...)에서 모델을 로드하되,
+        #    방금 불러온 원본 config를 강제로 사용하도록 합니다.
+        #    이렇게 하면 8002 크기의 모델이 생성되고, 8002 크기의 가중치가 로드됩니다.
+        model = AutoModelForSequenceClassification.from_pretrained(KOBERT_SAVED_REPO, config=config)
+        
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         model.to(device)
         
-        # config에서 후처리 맵핑(POST_PROCESSING_MAP) 불러오기
-        post_processing_map = getattr(config, 'post_processing_map', None)
+        # 3. ⭐️ config가 원본(monologg/kobert)에서 왔기 때문에,
+        #    고객님이 저장한 후처리 맵핑이 없습니다.
+        #    따라서 config가 아닌, 모델 객체에서 직접 불러와야 합니다.
+        post_processing_map = getattr(model.config, 'post_processing_map', None)
+        
         if post_processing_map is None:
-            st.error("🚨 치명적 오류: 모델 config에서 'post_processing_map'을 찾을 수 없습니다.")
-            return None, None, None, None
+            # (만약의 경우) 모델 config에도 맵핑이 저장 안 됐다면, 여기서 하드코딩합니다.
+            st.warning("모델 config에서 post_processing_map을 찾지 못해 하드코딩합니다.")
+            post_processing_map = {
+                '기쁨': '행복', '슬픔': '슬픔', '상처': '슬픔',
+                '불안': '힘듦', '당황': '놀람', '분노': '분노'
+            }
             
         return model, tokenizer, device, post_processing_map
         
     except Exception as e:
         st.error(f"🚨 AI 모델 로드 실패: {e}")
-        st.error(f"Hugging Face 저장소 '{KOBERT_MODEL_REPO}'에 접근할 수 있는지 확인하세요.")
+        st.error("Hugging Face 저장소 또는 monologg/kobert 모델을 확인하세요.")
         return None, None, None, None
 
 # --- 4. 핵심 분석 함수 (변경 없음) ---
 def analyze_diary_kobert(text, model, tokenizer, device, post_processing_map):
-    """
-    KoBERT 모델을 사용하여 전체 일기 텍스트의 감정을 분석합니다.
-    """
     if not text:
         return None, 0.0
 
     encodings = tokenizer(
-        text, 
-        truncation=True, 
-        padding=True, 
-        max_length=128, 
-        return_tensors="pt"
+        text, truncation=True, padding=True, max_length=128, return_tensors="pt"
     )
-    
     input_ids = encodings['input_ids'].to(device)
     attention_mask = encodings['attention_mask'].to(device)
   
@@ -132,7 +133,7 @@ def get_spotify_client():
 def fetch_all_data_from_gsheets(_client):
     try:
         spreadsheet = _client.open("diary_app_feedback")
-        worksheet = spreadsheet.workskey("Sheet1")
+        worksheet = spreadsheet.worksheet("Sheet1")
         df = pd.DataFrame(worksheet.get_all_records())
         return df
     except Exception as e:
@@ -140,16 +141,13 @@ def fetch_all_data_from_gsheets(_client):
         return pd.DataFrame()
 
 # --- 6. 추천 함수 (변경 없음) ---
-
 def get_spotify_playlist_recommendations(emotion):
     sp_client = get_spotify_client()
     if not sp_client: return ["Spotify 연결 실패"]
     try:
         playlist_ids = { 
-            "행복": "1kaEr7seXIYcPflw2M60eA", 
-            "슬픔": "3tAeVAtMWHzaGOXMGoRhTb", 
-            "분노": "22O1tfJ7fSjIo2FdxtJU1", 
-            "힘듦": "68HSylU5xKtDVYiago9RDw", 
+            "행복": "1kaEr7seXIYcPflw2M60eA", "슬픔": "3tAeVAtMWHzaGOXMGoRhTb", 
+            "분노": "22O1tfJ7fSjIo2FdxtJU1", "힘듦": "68HSylU5xKtDVYiago9RDw", 
             "놀람": "3sHzse5FGtcafd8dY0mO8h", 
         }
         playlist_id = playlist_ids.get(emotion)
@@ -168,10 +166,8 @@ def get_spotify_ai_recommendations(emotion):
     if not sp_client: return ["Spotify 연결 실패"]
     try:
         emotion_keywords = { 
-            "행복": ["행복", "신나는"], 
-            "슬픔": ["슬픈", "이별"], 
-            "분노": ["화날 때", "스트레스"], 
-            "힘듦": ["위로", "지칠 때"], 
+            "행복": ["행복", "신나는"], "슬픔": ["슬픈", "이별"], 
+            "분노": ["화날 때", "스트레스"], "힘듦": ["위로", "지칠 때"], 
             "놀람": ["파티", "신나는"], 
         }
         query = emotion_keywords.get(emotion)
@@ -194,39 +190,27 @@ def get_spotify_ai_recommendations(emotion):
         return [f"{track['name']} - {track['artists'][0]['name']}" for track in random_tracks]
     except Exception as e: return [f"Spotify AI 추천 오류: {e}"]
 
-
 @st.cache_data(ttl=86400)
 def get_tmdb_recommendations(emotion):
     if not TMDB_API_KEY:
         return ["TMDB API 키가 설정되지 않았습니다."]
-
     TMDB_GENRE_MAP = {
-        "행복": "35,10749,10751,10402,16",
-        "슬픔": "18,10749,36,10402",
-        "분노": "28,53,80,12,10752",
-        "힘듦": "12,14,16",
+        "행복": "35,10749,10751,10402,16", "슬픔": "18,10749,36,10402",
+        "분노": "28,53,80,12,10752", "힘듦": "12,14,16",
         "놀람": "9648,53,27,878,80"
     }
-    
     genre_ids_string = TMDB_GENRE_MAP.get(emotion)
     if not genre_ids_string:
         return [f"[{emotion}]에 대한 장르 맵핑이 없습니다."]
-
     endpoint = f"{TMDB_BASE_URL}/discover/movie"
     params = {
-        "api_key": TMDB_API_KEY,
-        "language": "ko-KR",
-        "sort_by": "popularity.desc",
-        "with_genres": genre_ids_string,
-        "page": 1,
-        "vote_count.gte": 100
+        "api_key": TMDB_API_KEY, "language": "ko-KR", "sort_by": "popularity.desc",
+        "with_genres": genre_ids_string, "page": 1, "vote_count.gte": 100
     }
-
     try:
         response = requests.get(endpoint, params=params)
         response.raise_for_status()
         data = response.json()
-
         if data.get('results'):
             top_movies = data['results'][:3]
             recommendations = []
@@ -238,30 +222,22 @@ def get_tmdb_recommendations(emotion):
             return recommendations
         else:
             return [f"[{emotion} 장르]의 인기 영화를 찾지 못했습니다."]
-            
     except requests.exceptions.RequestException as e:
         return [f"TMDb API 호출 실패: {e}"]
-
 
 def recommend(final_emotion, method):
     if method == 'AI 자동 추천':
         music_recs = get_spotify_ai_recommendations(final_emotion)
     else:
         music_recs = get_spotify_playlist_recommendations(final_emotion)
-    
     movie_recs = get_tmdb_recommendations(final_emotion)
-
     book_recommendations = {
-        "행복": ["기분을 관리하면 인생이 관리된다"],
-        "슬픔": ["아몬드"], 
-        "분노": ["분노의 심리학"],
-        "힘듦": ["죽고 싶지만 떡볶이는 먹고 싶어"], 
+        "행복": ["기분을 관리하면 인생이 관리된다"], "슬픔": ["아몬드"], 
+        "분노": ["분노의 심리학"], "힘듦": ["죽고 싶지만 떡볶이는 먹고 싶어"], 
         "놀람": ["데미안"],
     }
     book_recs = book_recommendations.get(final_emotion, [])
-
     return {'책': book_recs, '음악': music_recs, '영화': movie_recs}
-
 
 # --- 7. 피드백 저장 함수 (변경 없음) ---
 def save_feedback_to_gsheets(client, diary_text, corrected_emotion):
@@ -275,13 +251,10 @@ def save_feedback_to_gsheets(client, diary_text, corrected_emotion):
         st.error(f"피드백 저장 중 오류 발생: {e}")
 
 # --- 8. Streamlit UI 구성 (변경 없음) ---
-
 st.set_page_config(layout="wide")
 st.title("Moodiary 📝 감정 일기 (KoBERT Ver.)")
 
-# --- 상태 확인 Expander ---
 with st.expander("⚙️ 시스템 상태 확인"):
-    # 1. KoBERT 모델 로드
     with st.spinner("Hugging Face Hub에서 AI 모델을 불러오는 중입니다..."):
         model, tokenizer, device, post_processing_map = load_kobert_model()
     
@@ -290,29 +263,20 @@ with st.expander("⚙️ 시스템 상태 확인"):
     else:
         st.error("❗️ AI 모델 로드를 실패했습니다.")
 
-    # 2. API 키 확인
     if st.secrets.get("connections", {}).get("gsheets"): st.success("✅ Google Sheets 인증 정보가 확인되었습니다.")
     else: st.error("❗️ Google Sheets 인증 정보('connections.gsheets')를 찾을 수 없습니다.")
-    
     if st.secrets.get("spotify", {}).get("client_id"): st.success("✅ Spotify 인증 정보가 확인되었습니다.")
     else: st.error("❗️ Spotify 인증 정보('[spotify]' 섹션)를 찾을 수 없습니다.")
-
     if st.secrets.get("TMDB_API_KEY"): st.success("✅ TMDB API 키가 확인되었습니다.")
     else: st.error("❗️ TMDB API 키('TMDB_API_KEY')를 찾을 수 없습니다.")
 
 st.divider()
 
-# --- 세션 상태 초기화 ---
-if 'diary_text' not in st.session_state: 
-    st.session_state.diary_text = ""
-if 'final_emotion' not in st.session_state: 
-    st.session_state.final_emotion = None
-if 'confidence_score' not in st.session_state:
-    st.session_state.confidence_score = 0.0
-if 'rec_method' not in st.session_state: 
-    st.session_state.rec_method = '내 플레이리스트'
+if 'diary_text' not in st.session_state: st.session_state.diary_text = ""
+if 'final_emotion' not in st.session_state: st.session_state.final_emotion = None
+if 'confidence_score' not in st.session_state: st.session_state.confidence_score = 0.0
+if 'rec_method' not in st.session_state: st.session_state.rec_method = '내 플레이리스트'
 
-# --- 입력 UI ---
 col1, col2 = st.columns([3, 1])
 with col1:
     st.text_area("오늘의 일기를 작성해주세요:", key='diary_text', height=250,
@@ -349,66 +313,48 @@ with col2:
                 )
                 st.session_state.final_emotion = emotion
                 st.session_state.confidence_score = score
-
     st.button("🔍 내 하루 감정 분석하기", type="primary", on_click=handle_analyze_click)
 
-# --- 3. 결과 및 추천 표시 ---
 if st.session_state.final_emotion:
     final_emotion = st.session_state.final_emotion
     score = st.session_state.confidence_score
-
     st.subheader(f"오늘 하루의 핵심 감정은 '{final_emotion}' 입니다.")
     st.progress(score, text=f"감정 신뢰도: {score:.2%}")
     st.success(f"오늘 하루를 종합해 보면, **'{final_emotion}'**의 감정이 가장 컸네요!")
-    
     st.divider()
-    
     st.subheader(f"'{final_emotion}' 감정을 위한 오늘의 Moodiary 추천")
-    
     with st.spinner(f"'{final_emotion}'에 맞는 추천 항목을 찾고 있습니다..."):
         recs = recommend(final_emotion, st.session_state.rec_method)
-    
     rec_col1, rec_col2, rec_col3 = st.columns(3)
     with rec_col1:
         st.write("📚 **이런 책은 어때요?**")
         if recs['책']:
             for item in recs['책']: st.write(f"- {item}")
-        else:
-            st.write("- 추천을 찾지 못했어요.")
-            
+        else: st.write("- 추천을 찾지 못했어요.")
     with rec_col2:
         st.write("🎵 **이런 음악도 들어보세요?**")
         if recs['음악']:
             for item in recs['음악']: st.write(f"- {item}")
-        else:
-            st.write("- 추천을 찾지 못했어요.")
-
+        else: st.write("- 추천을 찾지 못했어요.")
     with rec_col3:
         st.write("🎬 **이런 영화도 추천해요?**")
         if recs['영화']:
             for item in recs['영화']: st.write(f"- {item}")
-        else:
-            st.write("- 추천을 찾지 못했어요.")
-
+        else: st.write("- 추천을 찾지 못했어요.")
     st.divider()
-
-    # --- 4. 피드백 섹션 ---
     st.subheader("🔍 분석 결과 피드백")
     st.write("AI의 분석 결과가 실제 감정과 다른가요? 피드백을 남겨주시면 모델 개선에 큰 도움이 됩니다.")
-    
     feedback_options = FINAL_EMOTIONS + ["(감정을 선택해주세요)"]
     try:
         default_index = feedback_options.index(final_emotion)
     except ValueError:
         default_index = len(feedback_options) - 1
-    
     corrected_emotion = st.selectbox(
         "이 일기의 진짜 감정은 무엇인가요?",
         options=feedback_options,
         index=default_index,
         key="feedback_emotion"
     )
-
     if st.button("피드백 제출하기"):
         if corrected_emotion == "(감정을 선택해주세요)":
             st.error("피드백할 감정을 선택해주세요.")
@@ -420,8 +366,6 @@ if st.session_state.final_emotion:
                 save_feedback_to_gsheets(client, st.session_state.diary_text, corrected_emotion)
             else:
                 st.error("Google Sheets에 연결할 수 없습니다.")
-
-# --- 5. 피드백 현황 ---
 st.divider()
 with st.expander("피드백 저장 현황 보기 (Google Sheets)"):
     client = get_gsheets_connection()
