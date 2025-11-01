@@ -29,7 +29,6 @@ except FileNotFoundError:
 
 FINAL_EMOTIONS = ["행복", "슬픔", "분노", "힘듦", "놀람"]
 
-
 # --- 3. KoBERT 모델 로드 (num_labels=6 강제) ---
 @st.cache_resource
 def load_kobert_model():
@@ -38,40 +37,40 @@ def load_kobert_model():
     Hugging Face Hub에 저장된 고객님의 가중치(weights)를 덮어씌웁니다.
     """
     try:
-        # 1. ⭐️ 원본(monologg/kobert)에서 올바른 Config와 Tokenizer를 불러옵니다.
-        config = AutoConfig.from_pretrained(
-            KOBERT_BASE_MODEL, 
-            trust_remote_code=True
-        )
-        tokenizer = AutoTokenizer.from_pretrained(
-            KOBERT_BASE_MODEL, 
-            trust_remote_code=True
-        )
-        
-        # 2. ⭐️⭐️⭐️ 중요: 원본 config를 수정하여, 레이블 개수를 6개로 강제합니다. ⭐️⭐️⭐️
+        # 1. ⭐️⭐️⭐️ 중요: 원본 config를 불러올 때, 레이블 개수를 6개로 강제합니다. ⭐️⭐️⭐️
         # (이전 모델의 2개 레이블 대신, 사용자가 파인튜닝한 6개 감정)
         # 또한, 라벨 맵핑을 여기서 직접 주입합니다.
         CORRECT_ID_TO_LABEL = {
             0: '분노', 1: '기쁨', 2: '불안', 
             3: '당황', 4: '슬픔', 5: '상처'
         }
-        config.num_labels = 6
-        config.id2label = CORRECT_ID_TO_LABEL
-        config.label2id = {label: id for id, label in CORRECT_ID_TO_LABEL.items()}
+        
+        config = AutoConfig.from_pretrained(
+            KOBERT_BASE_MODEL, 
+            trust_remote_code=True,
+            num_labels=6,  # <--- 이 부분이 핵심입니다 (2개가 아닌 6개)
+            id2label=CORRECT_ID_TO_LABEL,
+            label2id={label: id for id, label in CORRECT_ID_TO_LABEL.items()}
+        )
+        
+        tokenizer = AutoTokenizer.from_pretrained(
+            KOBERT_BASE_MODEL, 
+            trust_remote_code=True
+        )
 
-
-        # 3. ⭐️ 이제 '6개 라벨'이 적용된 config로 모델을 로드합니다.
+        # 2. ⭐️ 이제 '6개 라벨'이 적용된 config로 모델을 로드합니다.
         # 가중치는 고객님의 저장소(Young-jin/...)에서 가져옵니다.
         model = AutoModelForSequenceClassification.from_pretrained(
             KOBERT_SAVED_REPO, 
             config=config, 
-            trust_remote_code=True
+            trust_remote_code=True,
+            ignore_mismatched_sizes=False # 크기가 안 맞으면 오류를 내도록 설정 (정상)
         )
         
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         model.to(device)
         
-        # 4. 모델 config에서 후처리 맵핑을 불러옵니다.
+        # 3. 모델 config에서 후처리 맵핑을 불러옵니다.
         post_processing_map = getattr(model.config, 'post_processing_map', None)
         
         if post_processing_map is None:
@@ -103,9 +102,13 @@ def analyze_diary_kobert(text, model, tokenizer, device, post_processing_map):
     probabilities = torch.softmax(logits, dim=1)
     predicted_class_id = torch.argmax(probabilities, dim=1).cpu().numpy()[0]
     score = probabilities[0, predicted_class_id].item()
+    
+    # ⭐️ config에 id2label을 강제로 주입했으므로, model.config에서 바로 읽습니다.
     id_to_label = model.config.id2label
     original_label = id_to_label[predicted_class_id]
+    
     final_emotion = post_processing_map.get(original_label, original_label)
+    
     return final_emotion, score
 
 # --- 5. API 연결 함수 (변경 없음) ---
@@ -248,7 +251,7 @@ def save_feedback_to_gsheets(client, diary_text, corrected_emotion):
         st.success("소중한 피드백이 Google Sheets에 안전하게 저장되었습니다!")
         st.cache_data.clear()
     except Exception as e: 
-        st.error(f"피드백 저장 중 오류 발생: {e}")
+        st.error(f"Google Sheets 연결 오류: {e}") # ⭐️ 오류 메시지 명확화
 
 # --- 8. Streamlit UI 구성 (변경 없음) ---
 st.set_page_config(layout="wide")
