@@ -13,13 +13,9 @@ import torch
 from transformers import AutoModelForSequenceClassification, AutoTokenizer, AutoConfig
 
 # --- 2. 기본 설정 및 경로 ---
-
-# ⭐️⭐️⭐️ 핵심 변경 사항 ⭐️⭐️⭐️
-# KoBERT의 원본(Base)과 고객님의 저장소(Weights)를 분리합니다.
 KOBERT_BASE_MODEL = "monologg/kobert"
-KOBERT_SAVED_REPO = "Young-jin/kobert-moodiary-app" # 고객님의 fine-tuning된 가중치
+KOBERT_SAVED_REPO = "Young-jin/kobert-moodiary-app" 
 
-# TMDB API 설정 (Secrets에서 불러옴)
 TMDB_API_KEY = st.secrets.get("TMDB_API_KEY", "")
 TMDB_BASE_URL = "https://api.themoviedb.org/3"
 
@@ -34,7 +30,7 @@ except FileNotFoundError:
 FINAL_EMOTIONS = ["행복", "슬픔", "분노", "힘듦", "놀람"]
 
 
-# --- 3. KoBERT 모델 로드 (Size Mismatch 해결 버전) ---
+# --- 3. KoBERT 모델 로드 (trust_remote_code=True 추가) ---
 @st.cache_resource
 def load_kobert_model():
     """
@@ -43,25 +39,31 @@ def load_kobert_model():
     """
     try:
         # 1. ⭐️ 원본(monologg/kobert)에서 올바른 Config와 Tokenizer를 불러옵니다.
-        #    이것이 8002개 단어 크기를 보장합니다.
-        config = AutoConfig.from_pretrained(KOBERT_BASE_MODEL)
-        tokenizer = AutoTokenizer.from_pretrained(KOBERT_BASE_MODEL)
+        #    trust_remote_code=True 플래그를 추가합니다.
+        config = AutoConfig.from_pretrained(
+            KOBERT_BASE_MODEL, 
+            trust_remote_code=True
+        )
+        tokenizer = AutoTokenizer.from_pretrained(
+            KOBERT_BASE_MODEL, 
+            trust_remote_code=True
+        )
         
         # 2. ⭐️ 고객님의 저장소(Young-jin/...)에서 모델을 로드하되,
-        #    방금 불러온 원본 config를 강제로 사용하도록 합니다.
-        #    이렇게 하면 8002 크기의 모델이 생성되고, 8002 크기의 가중치가 로드됩니다.
-        model = AutoModelForSequenceClassification.from_pretrained(KOBERT_SAVED_REPO, config=config)
+        #    원본 config와 trust_remote_code=True 플래그를 사용합니다.
+        model = AutoModelForSequenceClassification.from_pretrained(
+            KOBERT_SAVED_REPO, 
+            config=config, 
+            trust_remote_code=True
+        )
         
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         model.to(device)
         
-        # 3. ⭐️ config가 원본(monologg/kobert)에서 왔기 때문에,
-        #    고객님이 저장한 후처리 맵핑이 없습니다.
-        #    따라서 config가 아닌, 모델 객체에서 직접 불러와야 합니다.
+        # 3. 모델 객체에서 후처리 맵핑을 불러옵니다.
         post_processing_map = getattr(model.config, 'post_processing_map', None)
         
         if post_processing_map is None:
-            # (만약의 경우) 모델 config에도 맵핑이 저장 안 됐다면, 여기서 하드코딩합니다.
             st.warning("모델 config에서 post_processing_map을 찾지 못해 하드코딩합니다.")
             post_processing_map = {
                 '기쁨': '행복', '슬픔': '슬픔', '상처': '슬픔',
@@ -79,26 +81,20 @@ def load_kobert_model():
 def analyze_diary_kobert(text, model, tokenizer, device, post_processing_map):
     if not text:
         return None, 0.0
-
     encodings = tokenizer(
         text, truncation=True, padding=True, max_length=128, return_tensors="pt"
     )
     input_ids = encodings['input_ids'].to(device)
     attention_mask = encodings['attention_mask'].to(device)
-  
     with torch.no_grad():
         outputs = model(input_ids=input_ids, attention_mask=attention_mask)
         logits = outputs.logits
-        
     probabilities = torch.softmax(logits, dim=1)
     predicted_class_id = torch.argmax(probabilities, dim=1).cpu().numpy()[0]
     score = probabilities[0, predicted_class_id].item()
-    
     id_to_label = model.config.id2label
     original_label = id_to_label[predicted_class_id]
-    
     final_emotion = post_processing_map.get(original_label, original_label)
-    
     return final_emotion, score
 
 # --- 5. API 연결 함수 (변경 없음) ---
@@ -152,11 +148,9 @@ def get_spotify_playlist_recommendations(emotion):
         }
         playlist_id = playlist_ids.get(emotion)
         if not playlist_id: return ["추천할 플레이리스트가 없어요."]
-        
         results = sp_client.playlist_items(playlist_id, limit=50)
         tracks = [item['track'] for item in results['items'] if item and item['track']]
         if not tracks: return ["플레이리스트에 노래가 없어요."]
-        
         random_tracks = random.sample(tracks, min(3, len(tracks)))
         return [f"{track['name']} - {track['artists'][0]['name']}" for track in random_tracks]
     except Exception as e: return [f"Spotify 추천 오류: {e}"]
@@ -172,20 +166,15 @@ def get_spotify_ai_recommendations(emotion):
         }
         query = emotion_keywords.get(emotion)
         if not query: return ["AI가 추천할 키워드를 찾지 못했어요."]
-        
         results = sp_client.search(q=random.choice(query), type='playlist', limit=20, market="KR")
         if not results: return [f"'{query}'에 대한 검색 결과가 없습니다."]
-        
         playlists = results.get('playlists', {}).get('items')
         if not playlists: return [f"'{query}' 관련 플레이리스트를 찾지 못했어요."]
-        
         random_playlist = random.choice(playlists)
         playlist_id = random_playlist['id']
-        
         results = sp_client.playlist_items(playlist_id, limit=50)
         tracks = [item['track'] for item in results['items'] if item and item['track']]
         if not tracks: return ["선택된 플레이리스트에 노래가 없어요."]
-        
         random_tracks = random.sample(tracks, min(3, len(tracks)))
         return [f"{track['name']} - {track['artists'][0]['name']}" for track in random_tracks]
     except Exception as e: return [f"Spotify AI 추천 오류: {e}"]
@@ -263,6 +252,7 @@ with st.expander("⚙️ 시스템 상태 확인"):
     else:
         st.error("❗️ AI 모델 로드를 실패했습니다.")
 
+    # ⭐️ 이 부분은 secrets.toml 파일이 올바르게 있어야 합니다.
     if st.secrets.get("connections", {}).get("gsheets"): st.success("✅ Google Sheets 인증 정보가 확인되었습니다.")
     else: st.error("❗️ Google Sheets 인증 정보('connections.gsheets')를 찾을 수 없습니다.")
     if st.secrets.get("spotify", {}).get("client_id"): st.success("✅ Spotify 인증 정보가 확인되었습니다.")
