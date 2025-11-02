@@ -1,7 +1,5 @@
 # --- 1. 필수 라이브러리 임포트 ---
 import streamlit as st
-import gspread
-from google.oauth2.service_account import Credentials
 import pandas as pd
 import matplotlib.pyplot as plt
 from matplotlib import font_manager
@@ -37,9 +35,8 @@ def load_kobert_model():
     Hugging Face Hub에 저장된 고객님의 가중치(weights)를 덮어씌웁니다.
     """
     try:
-        # 1. ⭐️⭐️⭐️ 중요: 원본 config를 불러올 때, 레이블 개수를 6개로 강제합니다. ⭐️⭐️⭐️
+        # 1. ⭐️ 원본(monologg/kobert)에서 올바른 Config와 Tokenizer를 불러옵니다.
         # (이전 모델의 2개 레이블 대신, 사용자가 파인튜닝한 6개 감정)
-        # 또한, 라벨 맵핑을 여기서 직접 주입합니다.
         CORRECT_ID_TO_LABEL = {
             0: '분노', 1: '기쁨', 2: '불안', 
             3: '당황', 4: '슬픔', 5: '상처'
@@ -48,7 +45,7 @@ def load_kobert_model():
         config = AutoConfig.from_pretrained(
             KOBERT_BASE_MODEL, 
             trust_remote_code=True,
-            num_labels=6,  # <--- 이 부분이 핵심입니다 (2개가 아닌 6개)
+            num_labels=6,  # <--- 6개 감정으로 강제
             id2label=CORRECT_ID_TO_LABEL,
             label2id={label: id for id, label in CORRECT_ID_TO_LABEL.items()}
         )
@@ -59,12 +56,11 @@ def load_kobert_model():
         )
 
         # 2. ⭐️ 이제 '6개 라벨'이 적용된 config로 모델을 로드합니다.
-        # 가중치는 고객님의 저장소(Young-jin/...)에서 가져옵니다.
         model = AutoModelForSequenceClassification.from_pretrained(
             KOBERT_SAVED_REPO, 
             config=config, 
             trust_remote_code=True,
-            ignore_mismatched_sizes=False # 크기가 안 맞으면 오류를 내도록 설정 (정상)
+            ignore_mismatched_sizes=False
         )
         
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -103,7 +99,6 @@ def analyze_diary_kobert(text, model, tokenizer, device, post_processing_map):
     predicted_class_id = torch.argmax(probabilities, dim=1).cpu().numpy()[0]
     score = probabilities[0, predicted_class_id].item()
     
-    # ⭐️ config에 id2label을 강제로 주입했으므로, model.config에서 바로 읽습니다.
     id_to_label = model.config.id2label
     original_label = id_to_label[predicted_class_id]
     
@@ -111,20 +106,7 @@ def analyze_diary_kobert(text, model, tokenizer, device, post_processing_map):
     
     return final_emotion, score
 
-# --- 5. API 연결 함수 (변경 없음) ---
-@st.cache_resource
-def get_gsheets_connection():
-    try:
-        creds_dict = st.secrets.get("connections", {}).get("gsheets")
-        if creds_dict:
-            scope = ['https://www.googleapis.com/auth/spreadsheets', 'https://www.googleapis.com/auth/drive']
-            credentials = Credentials.from_service_account_info(creds_dict, scopes=scope)
-            client = gspread.authorize(credentials)
-            return client
-        return None
-    except Exception:
-        return None
-
+# --- 5. API 연결 함수 (Google Sheets 제거) ---
 @st.cache_resource
 def get_spotify_client():
     spotify_creds = st.secrets.get("spotify", {})
@@ -138,17 +120,6 @@ def get_spotify_client():
         return sp
     except Exception:
         return None
-
-@st.cache_data(ttl=60)
-def fetch_all_data_from_gsheets(_client):
-    try:
-        spreadsheet = _client.open("diary_app_feedback")
-        worksheet = spreadsheet.worksheet("Sheet1")
-        df = pd.DataFrame(worksheet.get_all_records())
-        return df
-    except Exception as e:
-        st.error(f"Google Sheets 데이터 로딩 오류: {e}")
-        return pd.DataFrame()
 
 # --- 6. 추천 함수 (변경 없음) ---
 def get_spotify_playlist_recommendations(emotion):
@@ -242,18 +213,7 @@ def recommend(final_emotion, method):
     book_recs = book_recommendations.get(final_emotion, [])
     return {'책': book_recs, '음악': music_recs, '영화': movie_recs}
 
-# --- 7. 피드백 저장 함수 (변경 없음) ---
-def save_feedback_to_gsheets(client, diary_text, corrected_emotion):
-    try:
-        spreadsheet = client.open("diary_app_feedback")
-        worksheet = spreadsheet.worksheet("Sheet1")
-        worksheet.append_rows([[diary_text, corrected_emotion]], value_input_option='USER_ENTERED')
-        st.success("소중한 피드백이 Google Sheets에 안전하게 저장되었습니다!")
-        st.cache_data.clear()
-    except Exception as e: 
-        st.error(f"Google Sheets 연결 오류: {e}") # ⭐️ 오류 메시지 명확화
-
-# --- 8. Streamlit UI 구성 (변경 없음) ---
+# --- 7. Streamlit UI 구성 (Google Sheets 관련 UI 모두 제거) ---
 st.set_page_config(layout="wide")
 st.title("Moodiary 📝 감정 일기 (KoBERT Ver.)")
 
@@ -266,8 +226,7 @@ with st.expander("⚙️ 시스템 상태 확인"):
     else:
         st.error("❗️ AI 모델 로드를 실패했습니다.")
 
-    if st.secrets.get("connections", {}).get("gsheets"): st.success("✅ Google Sheets 인증 정보가 확인되었습니다.")
-    else: st.error("❗️ Google Sheets 인증 정보('connections.gsheets')를 찾을 수 없습니다.")
+    # ⭐️ Google Sheets 확인란 제거
     if st.secrets.get("spotify", {}).get("client_id"): st.success("✅ Spotify 인증 정보가 확인되었습니다.")
     else: st.error("❗️ Spotify 인증 정보('[spotify]' 섹션)를 찾을 수 없습니다.")
     if st.secrets.get("TMDB_API_KEY"): st.success("✅ TMDB API 키가 확인되었습니다.")
@@ -344,40 +303,5 @@ if st.session_state.final_emotion:
         if recs['영화']:
             for item in recs['영화']: st.write(f"- {item}")
         else: st.write("- 추천을 찾지 못했어요.")
-    st.divider()
-    st.subheader("🔍 분석 결과 피드백")
-    st.write("AI의 분석 결과가 실제 감정과 다른가요? 피드백을 남겨주시면 모델 개선에 큰 도움이 됩니다.")
-    feedback_options = FINAL_EMOTIONS + ["(감정을 선택해주세요)"]
-    try:
-        default_index = feedback_options.index(final_emotion)
-    except ValueError:
-        default_index = len(feedback_options) - 1
-    corrected_emotion = st.selectbox(
-        "이 일기의 진짜 감정은 무엇인가요?",
-        options=feedback_options,
-        index=default_index,
-        key="feedback_emotion"
-    )
-    if st.button("피드백 제출하기"):
-        if corrected_emotion == "(감정을 선택해주세요)":
-            st.error("피드백할 감정을 선택해주세요.")
-        elif corrected_emotion == st.session_state.final_emotion:
-            st.info("AI의 분석과 동일한 감정이네요. 알려주셔서 감사합니다! 😄")
-        else:
-            client = get_gsheets_connection()
-            if client:
-                save_feedback_to_gsheets(client, st.session_state.diary_text, corrected_emotion)
-            else:
-                st.error("Google Sheets에 연결할 수 없습니다.")
-st.divider()
-with st.expander("피드백 저장 현황 보기 (Google Sheets)"):
-    client = get_gsheets_connection()
-    if client:
-        df = fetch_all_data_from_gsheets(client)
-        if not df.empty:
-            st.dataframe(df.tail())
-            st.info(f"현재 총 **{len(df)}개**의 데이터가 저장되어 있습니다. (1분마다 갱신)")
-        else:
-            st.write("아직 저장된 데이터가 없습니다.")
-    else:
-        st.error("Google Sheets에 연결할 수 없습니다. Secrets 설정을 다시 확인해주세요.")
+
+# --- ⭐️ "피드백" 및 "피드백 저장 현황" 섹션 전체 제거 ---
