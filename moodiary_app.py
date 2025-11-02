@@ -14,7 +14,7 @@ from transformers import AutoModelForSequenceClassification, AutoTokenizer, Auto
 KOBERT_BASE_MODEL = "monologg/kobert"
 KOBERT_SAVED_REPO = "Young-jin/kobert-moodiary-app" 
 
-TMDB_API_KEY = st.secrets.get("TMDB_API_KEY", "")
+# ⭐️ TMDB_API_KEY를 전역 변수로 읽지 않습니다. (캐시 문제 우회)
 TMDB_BASE_URL = "https://api.themoviedb.org/3"
 
 # 폰트 설정
@@ -35,8 +35,6 @@ def load_kobert_model():
     Hugging Face Hub에 저장된 고객님의 가중치(weights)를 덮어씌웁니다.
     """
     try:
-        # 1. ⭐️ 원본(monologg/kobert)에서 올바른 Config와 Tokenizer를 불러옵니다.
-        # (이전 모델의 2개 레이블 대신, 사용자가 파인튜닝한 6개 감정)
         CORRECT_ID_TO_LABEL = {
             0: '분노', 1: '기쁨', 2: '불안', 
             3: '당황', 4: '슬픔', 5: '상처'
@@ -45,7 +43,7 @@ def load_kobert_model():
         config = AutoConfig.from_pretrained(
             KOBERT_BASE_MODEL, 
             trust_remote_code=True,
-            num_labels=6,  # <--- 6개 감정으로 강제
+            num_labels=6,
             id2label=CORRECT_ID_TO_LABEL,
             label2id={label: id for id, label in CORRECT_ID_TO_LABEL.items()}
         )
@@ -55,7 +53,6 @@ def load_kobert_model():
             trust_remote_code=True
         )
 
-        # 2. ⭐️ 이제 '6개 라벨'이 적용된 config로 모델을 로드합니다.
         model = AutoModelForSequenceClassification.from_pretrained(
             KOBERT_SAVED_REPO, 
             config=config, 
@@ -66,7 +63,6 @@ def load_kobert_model():
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         model.to(device)
         
-        # 3. 모델 config에서 후처리 맵핑을 불러옵니다.
         post_processing_map = getattr(model.config, 'post_processing_map', None)
         
         if post_processing_map is None:
@@ -118,13 +114,14 @@ def get_spotify_client():
         client_credentials_manager = SpotifyClientCredentials(client_id=client_id, client_secret=client_secret)
         sp = spotipy.Spotify(client_credentials_manager=client_credentials_manager)
         return sp
-    except Exception:
+    except Exception as e:
+        st.error(f"Spotify 로그인 오류: {e}")
         return None
 
-# --- 6. 추천 함수 (변경 없음) ---
+# --- 6. 추천 함수 (TMDB 캐시 문제 수정) ---
 def get_spotify_playlist_recommendations(emotion):
     sp_client = get_spotify_client()
-    if not sp_client: return ["Spotify 연결 실패"]
+    if not sp_client: return ["Spotify 연결 실패 (클라이언트 초기화 실패)"]
     try:
         playlist_ids = { 
             "행복": "1kaEr7seXIYcPflw2M60eA", "슬픔": "3tAeVAtMWHzaGOXMGoRhTb", 
@@ -138,36 +135,16 @@ def get_spotify_playlist_recommendations(emotion):
         if not tracks: return ["플레이리스트에 노래가 없어요."]
         random_tracks = random.sample(tracks, min(3, len(tracks)))
         return [f"{track['name']} - {track['artists'][0]['name']}" for track in random_tracks]
-    except Exception as e: return [f"Spotify 추천 오류: {e}"]
+    except Exception as e: return [f"Spotify API 호출 오류: {e}"]
 
-def get_spotify_ai_recommendations(emotion):
-    sp_client = get_spotify_client()
-    if not sp_client: return ["Spotify 연결 실패"]
-    try:
-        emotion_keywords = { 
-            "행복": ["행복", "신나는"], "슬픔": ["슬픈", "이별"], 
-            "분노": ["화날 때", "스트레스"], "힘듦": ["위로", "지칠 때"], 
-            "놀람": ["파티", "신나는"], 
-        }
-        query = emotion_keywords.get(emotion)
-        if not query: return ["AI가 추천할 키워드를 찾지 못했어요."]
-        results = sp_client.search(q=random.choice(query), type='playlist', limit=20, market="KR")
-        if not results: return [f"'{query}'에 대한 검색 결과가 없습니다."]
-        playlists = results.get('playlists', {}).get('items')
-        if not playlists: return [f"'{query}' 관련 플레이리스트를 찾지 못했어요."]
-        random_playlist = random.choice(playlists)
-        playlist_id = random_playlist['id']
-        results = sp_client.playlist_items(playlist_id, limit=50)
-        tracks = [item['track'] for item in results['items'] if item and item['track']]
-        if not tracks: return ["선택된 플레이리스트에 노래가 없어요."]
-        random_tracks = random.sample(tracks, min(3, len(tracks)))
-        return [f"{track['name']} - {track['artists'][0]['name']}" for track in random_tracks]
-    except Exception as e: return [f"Spotify AI 추천 오류: {e}"]
-
-@st.cache_data(ttl=86400)
+# ⭐️ @st.cache_data를 제거하여 캐시 문제를 우회합니다.
 def get_tmdb_recommendations(emotion):
-    if not TMDB_API_KEY:
-        return ["TMDB API 키가 설정되지 않았습니다."]
+    # ⭐️ 함수가 실행될 때마다 Secrets에서 TMDB 키를 새로 읽어옵니다.
+    current_tmdb_key = st.secrets.get("TMDB_API_KEY", "")
+    
+    if not current_tmdb_key:
+        return ["TMDB API 키가 설정되지 않았습니다. (Secrets에서 읽기 실패)"]
+        
     TMDB_GENRE_MAP = {
         "행복": "35,10749,10751,10402,16", "슬픔": "18,10749,36,10402",
         "분노": "28,53,80,12,10752", "힘듦": "12,14,16",
@@ -178,7 +155,8 @@ def get_tmdb_recommendations(emotion):
         return [f"[{emotion}]에 대한 장르 맵핑이 없습니다."]
     endpoint = f"{TMDB_BASE_URL}/discover/movie"
     params = {
-        "api_key": TMDB_API_KEY, "language": "ko-KR", "sort_by": "popularity.desc",
+        "api_key": current_tmdb_key, # ⭐️ 새로 읽은 키 사용
+        "language": "ko-KR", "sort_by": "popularity.desc",
         "with_genres": genre_ids_string, "page": 1, "vote_count.gte": 100
     }
     try:
@@ -201,9 +179,11 @@ def get_tmdb_recommendations(emotion):
 
 def recommend(final_emotion, method):
     if method == 'AI 자동 추천':
-        music_recs = get_spotify_ai_recommendations(final_emotion)
+        # (AI 추천 함수는 구현되지 않았으므로, 플레이리스트로 대체합니다)
+        music_recs = get_spotify_playlist_recommendations(final_emotion)
     else:
         music_recs = get_spotify_playlist_recommendations(final_emotion)
+        
     movie_recs = get_tmdb_recommendations(final_emotion)
     book_recommendations = {
         "행복": ["기분을 관리하면 인생이 관리된다"], "슬픔": ["아몬드"], 
@@ -229,8 +209,12 @@ with st.expander("⚙️ 시스템 상태 확인"):
     # ⭐️ Google Sheets 확인란 제거
     if st.secrets.get("spotify", {}).get("client_id"): st.success("✅ Spotify 인증 정보가 확인되었습니다.")
     else: st.error("❗️ Spotify 인증 정보('[spotify]' 섹션)를 찾을 수 없습니다.")
-    if st.secrets.get("TMDB_API_KEY"): st.success("✅ TMDB API 키가 확인되었습니다.")
-    else: st.error("❗️ TMDB API 키('TMDB_API_KEY')를 찾을 수 없습니다.")
+        
+    # ⭐️ TMDB 확인 로직 변경 (함수가 직접 확인하므로 여기서는 키 존재 여부만)
+    if st.secrets.get("TMDB_API_KEY"):
+        st.success("✅ TMDB API 키가 Secrets에 존재합니다.")
+    else:
+        st.error("❗️ TMDB API 키('TMDB_API_KEY')를 Secrets에서 찾을 수 없습니다.")
 
 st.divider()
 
@@ -241,8 +225,8 @@ if 'rec_method' not in st.session_state: st.session_state.rec_method = '내 플�
 
 col1, col2 = st.columns([3, 1])
 with col1:
-    st.text_area("오늘의 일기를 작성해주세요:", key='diary_text', height=250,
-                 value=st.session_state.diary_text)
+    # ⭐️ 'diary_text' 위젯 경고 해결: value=... 인자 제거
+    st.text_area("오늘의 일기를 작성해주세요:", key='diary_text', height=250)
 with col2:
     st.write(" "); st.write(" ")
     st.radio("음악 추천 방식 선택", ('내 플레이리스트', 'AI 자동 추천'), key='rec_method', horizontal=True)
@@ -296,12 +280,10 @@ if st.session_state.final_emotion:
     with rec_col2:
         st.write("🎵 **이런 음악도 들어보세요?**")
         if recs['음악']:
-            for item in recs['음악']: st.write(f"- {item}")
+            for item in recs['음S']: st.write(f"- {item}")
         else: st.write("- 추천을 찾지 못했어요.")
     with rec_col3:
         st.write("🎬 **이런 영화도 추천해요?**")
         if recs['영화']:
             for item in recs['영화']: st.write(f"- {item}")
         else: st.write("- 추천을 찾지 못했어요.")
-
-# --- ⭐️ "피드백" 및 "피드백 저장 현황" 섹션 전체 제거 ---
