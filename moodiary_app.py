@@ -280,10 +280,11 @@ if st.session_state.final_emotion:
     with rec_col2:
         st.write("🎵 **이런 음악도 들어보세요?**")
         if recs['음악']:
-            for item in recs['음S']: st.write(f"- {item}")
+            for item in recs['음악']: st.write(f"- {item}")
         else: st.write("- 추천을 찾지 못했어요.")
     with rec_col3:
         st.write("🎬 **이런 영화도 추천해요?**")
         if recs['영화']:
             for item in recs['영화']: st.write(f"- {item}")
         else: st.write("- 추천을 찾지 못했어요.")
+
