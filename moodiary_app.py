@@ -101,17 +101,10 @@ def get_spotify_client():
         st.error(f"Spotify 로그인 오류: {e}")
         return None
 
-# --- 6. 추천 함수 (Spotify 로직 수정) ---
-
-# ⭐️ 이 함수는 ID가 고장나서 사용하지 않습니다. (get_spotify_playlist_recommendations)
-#    대신 아래의 "AI 추천" (검색) 함수를 사용합니다.
-
-# ⭐️⭐️⭐️ "AI 자동 추천" (검색) 함수 로직을 되살립니다. ⭐️⭐️⭐️
+# --- 6. 추천 함수 (TMDB 장르 맵 수정) ---
 def get_spotify_ai_recommendations(emotion):
     sp_client = get_spotify_client()
     if not sp_client: return ["Spotify 연결 실패 (클라이언트 초기화 실패)"]
-    
-    # (키워드도 6감정 체계에 맞게 수정)
     emotion_keywords = { 
         "행복": ["K-Pop Happy", "신나는"], 
         "슬픔": ["K-Pop Ballad", "슬픈", "이별"], 
@@ -120,26 +113,20 @@ def get_spotify_ai_recommendations(emotion):
         "놀람": ["K-Pop Party", "신나는"], 
     }
     query = random.choice(emotion_keywords.get(emotion, ["K-Pop"]))
-    
     try:
         results = sp_client.search(q=query, type='playlist', limit=20, market="KR")
         if not results: return [f"'{query}'에 대한 검색 결과가 없습니다."]
-        
         playlists = results.get('playlists', {}).get('items')
         if not playlists: return [f"'{query}' 관련 플레이리스트를 찾지 못했어요."]
-        
         random_playlist = random.choice(playlists)
         playlist_id = random_playlist['id']
-        
         results = sp_client.playlist_items(playlist_id, limit=50)
         tracks = [item['track'] for item in results['items'] if item and item['track']]
         if not tracks: return ["선택된 플레이리스트에 노래가 없어요."]
-        
         random_tracks = random.sample(tracks, min(3, len(tracks)))
         return [f"{track['name']} - {track['artists'][0]['name']}" for track in random_tracks]
     except Exception as e: return [f"Spotify AI 검색 오류: {e}"]
 
-# ⭐️ TMDB 함수 (변경 없음, 잘 작동 중)
 def get_tmdb_recommendations(emotion):
     tmdb_creds = st.secrets.get("tmdb", {})
     current_tmdb_key = tmdb_creds.get("api_key", "")
@@ -147,10 +134,13 @@ def get_tmdb_recommendations(emotion):
     if not current_tmdb_key:
         return ["TMDB API 키가 설정되지 않았습니다. (Secrets[tmdb][api_key] 읽기 실패)"]
         
+    # ⭐️⭐️⭐️ 중요: 콤마(,)를 파이프(|)로 변경하여 "OR" 조건으로 검색 ⭐️⭐️⭐️
     TMDB_GENRE_MAP = {
-        "행복": "35,10749,10751,10402,16", "슬픔": "18,10749,36,10402",
-        "분노": "28,53,80,12,10752", "힘듦": "12,14,16",
-        "놀람": "9648,53,27,878,80"
+        "행복": "35|10749|10751|10402|16",
+        "슬픔": "18|10749|36|10402",
+        "분노": "28|53|80|12|10752",
+        "힘듦": "12|14|16",
+        "놀람": "9648|53|27|878|80"  # <--- 이 부분이 수정되었습니다
     }
     genre_ids_string = TMDB_GENRE_MAP.get(emotion)
     if not genre_ids_string:
@@ -180,13 +170,9 @@ def get_tmdb_recommendations(emotion):
     except requests.exceptions.RequestException as e:
         return [f"TMDb API 호출 실패: {e}"]
 
-# ⭐️⭐️⭐️ recommend 함수 수정 ⭐️⭐️⭐️
 def recommend(final_emotion, method):
-    # ⭐️ "AI 자동 추천" (검색 기반) 함수가 더 안정적이므로,
-    #    "내 플레이리스트" (hardcoded)가 고장난 지금은 이 함수를 항상 사용합니다.
-    #    이제 method 변수는 사용되지 않습니다.
+    # (이제 method 변수는 사용되지 않고, 항상 AI 추천(검색)을 사용합니다)
     music_recs = get_spotify_ai_recommendations(final_emotion)
-        
     movie_recs = get_tmdb_recommendations(final_emotion)
     book_recommendations = {
         "행복": ["기분을 관리하면 인생이 관리된다"], "슬픔": ["아몬드"], 
@@ -229,6 +215,7 @@ with col1:
     st.text_area("오늘의 일기를 작성해주세요:", key='diary_text', height=250)
 with col2:
     st.write(" "); st.write(" ")
+    # ⭐️ "내 플레이리스트" 옵션이 이제 "AI 자동 추천"과 동일하게 작동하지만, UI는 유지합니다.
     st.radio("음악 추천 방식 선택", ('내 플레이리스트', 'AI 자동 추천'), key='rec_method', horizontal=True)
     
     def handle_random_click():
