@@ -101,31 +101,46 @@ def get_spotify_client():
         st.error(f"Spotify 로그인 오류: {e}")
         return None
 
-# --- 6. 추천 함수 (TMDB 읽기 방식 변경) ---
-def get_spotify_playlist_recommendations(emotion):
+# --- 6. 추천 함수 (Spotify 로직 수정) ---
+
+# ⭐️ 이 함수는 ID가 고장나서 사용하지 않습니다. (get_spotify_playlist_recommendations)
+#    대신 아래의 "AI 추천" (검색) 함수를 사용합니다.
+
+# ⭐️⭐️⭐️ "AI 자동 추천" (검색) 함수 로직을 되살립니다. ⭐️⭐️⭐️
+def get_spotify_ai_recommendations(emotion):
     sp_client = get_spotify_client()
     if not sp_client: return ["Spotify 연결 실패 (클라이언트 초기화 실패)"]
+    
+    # (키워드도 6감정 체계에 맞게 수정)
+    emotion_keywords = { 
+        "행복": ["K-Pop Happy", "신나는"], 
+        "슬픔": ["K-Pop Ballad", "슬픈", "이별"], 
+        "분노": ["K-Rock", "화날 때", "스트레스"], 
+        "힘듦": ["K-Pop healing", "위로", "지칠 때"], 
+        "놀람": ["K-Pop Party", "신나는"], 
+    }
+    query = random.choice(emotion_keywords.get(emotion, ["K-Pop"]))
+    
     try:
-        playlist_ids = { 
-            "행복": "1kaEr7seXIYcPflw2M60eA", "슬픔": "3tAeVAtMWHzaGOXMGoRhTb", 
-            "분노": "22O1tfJ7fSjIo2FdxtJU1", "힘듦": "68HSylU5xKtDVYiago9RDw", 
-            "놀람": "3sHzseFGtcafd8dY0mO8h", 
-        }
-        playlist_id = playlist_ids.get(emotion)
-        if not playlist_id: return ["추천할 플레이리스트가 없어요."]
+        results = sp_client.search(q=query, type='playlist', limit=20, market="KR")
+        if not results: return [f"'{query}'에 대한 검색 결과가 없습니다."]
+        
+        playlists = results.get('playlists', {}).get('items')
+        if not playlists: return [f"'{query}' 관련 플레이리스트를 찾지 못했어요."]
+        
+        random_playlist = random.choice(playlists)
+        playlist_id = random_playlist['id']
+        
         results = sp_client.playlist_items(playlist_id, limit=50)
         tracks = [item['track'] for item in results['items'] if item and item['track']]
-        if not tracks: return ["플레이리스트에 노래가 없어요."]
+        if not tracks: return ["선택된 플레이리스트에 노래가 없어요."]
+        
         random_tracks = random.sample(tracks, min(3, len(tracks)))
         return [f"{track['name']} - {track['artists'][0]['name']}" for track in random_tracks]
-    except Exception as e: return [f"Spotify API 호출 오류: {e}"]
+    except Exception as e: return [f"Spotify AI 검색 오류: {e}"]
 
-def get_spotify_ai_recommendations(emotion):
-    return get_spotify_playlist_recommendations(emotion)
-
-# ⭐️ @st.cache_data 제거, TMDB 읽기 방식 변경
+# ⭐️ TMDB 함수 (변경 없음, 잘 작동 중)
 def get_tmdb_recommendations(emotion):
-    # ⭐️⭐️⭐️ TMDB 키를 [tmdb] 섹션에서 읽어오도록 변경 ⭐️⭐️⭐️
     tmdb_creds = st.secrets.get("tmdb", {})
     current_tmdb_key = tmdb_creds.get("api_key", "")
     
@@ -165,11 +180,12 @@ def get_tmdb_recommendations(emotion):
     except requests.exceptions.RequestException as e:
         return [f"TMDb API 호출 실패: {e}"]
 
+# ⭐️⭐️⭐️ recommend 함수 수정 ⭐️⭐️⭐️
 def recommend(final_emotion, method):
-    if method == 'AI 자동 추천':
-        music_recs = get_spotify_ai_recommendations(final_emotion)
-    else:
-        music_recs = get_spotify_playlist_recommendations(final_emotion)
+    # ⭐️ "AI 자동 추천" (검색 기반) 함수가 더 안정적이므로,
+    #    "내 플레이리스트" (hardcoded)가 고장난 지금은 이 함수를 항상 사용합니다.
+    #    이제 method 변수는 사용되지 않습니다.
+    music_recs = get_spotify_ai_recommendations(final_emotion)
         
     movie_recs = get_tmdb_recommendations(final_emotion)
     book_recommendations = {
@@ -180,7 +196,7 @@ def recommend(final_emotion, method):
     book_recs = book_recommendations.get(final_emotion, [])
     return {'책': book_recs, '음악': music_recs, '영화': movie_recs}
 
-# --- 7. Streamlit UI 구성 (TMDB 확인 로직 변경) ---
+# --- 7. Streamlit UI 구성 (변경 없음) ---
 st.set_page_config(layout="wide")
 st.title("Moodiary 📝 감정 일기 (KoBERT Ver.)")
 
@@ -196,7 +212,6 @@ with st.expander("⚙️ 시스템 상태 확인"):
     if st.secrets.get("spotify", {}).get("client_id"): st.success("✅ Spotify 인증 정보가 확인되었습니다.")
     else: st.error("❗️ Spotify 인증 정보('[spotify]' 섹션)를 찾을 수 없습니다.")
         
-    # ⭐️⭐️⭐️ TMDB 확인 로직을 [tmdb][api_key]로 변경 ⭐️⭐️⭐️
     if st.secrets.get("tmdb", {}).get("api_key"):
         st.success("✅ TMDB API 키가 Secrets에 존재합니다. ([tmdb][api_key])")
     else:
