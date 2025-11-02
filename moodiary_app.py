@@ -101,10 +101,13 @@ def get_spotify_client():
         st.error(f"Spotify 로그인 오류: {e}")
         return None
 
-# --- 6. 추천 함수 (TMDB 장르 맵 수정) ---
+# --- 6. 추천 함수 (Spotify 오류 수정) ---
+
+# ⭐️⭐️⭐️ "AI 자동 추천" (검색) 함수 로직 수정 ⭐️⭐️⭐️
 def get_spotify_ai_recommendations(emotion):
     sp_client = get_spotify_client()
     if not sp_client: return ["Spotify 연결 실패 (클라이언트 초기화 실패)"]
+    
     emotion_keywords = { 
         "행복": ["K-Pop Happy", "신나는"], 
         "슬픔": ["K-Pop Ballad", "슬픈", "이별"], 
@@ -113,20 +116,40 @@ def get_spotify_ai_recommendations(emotion):
         "놀람": ["K-Pop Party", "신나는"], 
     }
     query = random.choice(emotion_keywords.get(emotion, ["K-Pop"]))
+    
     try:
         results = sp_client.search(q=query, type='playlist', limit=20, market="KR")
-        if not results: return [f"'{query}'에 대한 검색 결과가 없습니다."]
+        if not results: 
+            return [f"'{query}'에 대한 검색 결과가 없습니다."]
+        
         playlists = results.get('playlists', {}).get('items')
-        if not playlists: return [f"'{query}' 관련 플레이리스트를 찾지 못했어요."]
+        if not playlists: # playlists가 None이거나 [] (빈 리스트)일 경우
+            return [f"'{query}' 관련 플레이리스트를 찾지 못했어요."]
+        
         random_playlist = random.choice(playlists)
         playlist_id = random_playlist['id']
-        results = sp_client.playlist_items(playlist_id, limit=50)
-        tracks = [item['track'] for item in results['items'] if item and item['track']]
-        if not tracks: return ["선택된 플레이리스트에 노래가 없어요."]
+        
+        # ⭐️⭐️⭐️ 여기가 핵심 수정 ⭐️⭐️⭐️
+        # tracks_results가 None일 경우를 대비합니다.
+        tracks_results = sp_client.playlist_items(playlist_id, limit=50)
+        
+        if not tracks_results or 'items' not in tracks_results:
+             # (오류 대신, 다른 플레이리스트를 찾도록 재시도할 수도 있지만, 우선은 방어합니다.)
+             return [f"'{random_playlist.get('name')}' 플레이리스트를 읽어오지 못했습니다."]
+        # ⭐️⭐️⭐️ 수정 끝 ⭐️⭐️⭐️
+
+        tracks = [item['track'] for item in tracks_results['items'] if item and item['track']]
+        if not tracks: 
+            return ["선택된 플레이리스트에 노래가 없어요."]
+        
         random_tracks = random.sample(tracks, min(3, len(tracks)))
         return [f"{track['name']} - {track['artists'][0]['name']}" for track in random_tracks]
-    except Exception as e: return [f"Spotify AI 검색 오류: {e}"]
+    
+    except Exception as e: 
+        # (IndexError 등 다른 오류도 여기서 잡힙니다)
+        return [f"Spotify AI 검색 오류: {e}"]
 
+# ⭐️ TMDB 함수 (변경 없음, 잘 작동 중)
 def get_tmdb_recommendations(emotion):
     tmdb_creds = st.secrets.get("tmdb", {})
     current_tmdb_key = tmdb_creds.get("api_key", "")
@@ -134,13 +157,12 @@ def get_tmdb_recommendations(emotion):
     if not current_tmdb_key:
         return ["TMDB API 키가 설정되지 않았습니다. (Secrets[tmdb][api_key] 읽기 실패)"]
         
-    # ⭐️⭐️⭐️ 중요: 콤마(,)를 파이프(|)로 변경하여 "OR" 조건으로 검색 ⭐️⭐️⭐️
     TMDB_GENRE_MAP = {
         "행복": "35|10749|10751|10402|16",
         "슬픔": "18|10749|36|10402",
         "분노": "28|53|80|12|10752",
         "힘듦": "12|14|16",
-        "놀람": "9648|53|27|878|80"  # <--- 이 부분이 수정되었습니다
+        "놀람": "9648|53|27|878|80"
     }
     genre_ids_string = TMDB_GENRE_MAP.get(emotion)
     if not genre_ids_string:
@@ -157,8 +179,7 @@ def get_tmdb_recommendations(emotion):
         response.raise_for_status()
         data = response.json()
         if data.get('results'):
-            # ⭐️ data['results']에서 상위 3개를 가져옵니다 (Request 2)
-            top_movies = data['results'][:3] 
+            top_movies = data['results'][:3]
             recommendations = []
             for movie in top_movies:
                 title = movie['title']
