@@ -98,10 +98,12 @@ def get_spotify_client():
     except Exception as e:
         return None 
 
-# --- 6. 추천 함수 (TMDB "치유형" 장르) ---
+# --- 6. 추천 함수 (Spotify 오류 수정, TMDB 랜덤 추천) ---
+
+# ⭐️ "AI 자동 추천" (검색) 함수 로직 수정
 def get_spotify_ai_recommendations(emotion):
     sp_client = get_spotify_client()
-    if not sp_client: return ["Spotify 연결에 실패했습니다. API 키를 확인해주세요."]
+    if not sp_client: return ["Spotify 연결 실패 (클라이언트 초기화 실패)"]
     emotion_keywords = { 
         "행복": ["K-Pop Happy", "신나는"], 
         "슬픔": ["K-Pop Ballad", "슬픈", "이별"], 
@@ -115,22 +117,40 @@ def get_spotify_ai_recommendations(emotion):
         if not results: return [f"'{query}'에 대한 검색 결과가 없습니다."]
         playlists = results.get('playlists', {}).get('items')
         if not playlists: return [f"'{query}' 관련 플레이리스트를 찾지 못했어요."]
-        random_playlist = random.choice(playlists)
-        playlist_id = random_playlist['id']
-        tracks_results = sp_client.playlist_items(playlist_id, limit=50)
-        if not tracks_results or 'items' not in tracks_results:
-             return [f"'{random_playlist.get('name')}' 플레이리스트를 읽어오지 못했습니다."]
-        tracks = [item['track'] for item in tracks_results['items'] if item and item['track']]
-        if not tracks: return ["선택된 플레이리스트에 노래가 없어요."]
-        random_tracks = random.sample(tracks, min(3, len(tracks)))
-        return [f"{track['name']} - {track['artists'][0]['name']}" for track in random_tracks]
+        
+        # ⭐️⭐️⭐️ Spotify 오류 수정 (1) ⭐️⭐️⭐️
+        # 3번까지 재시도해서 유효한 트랙을 찾습니다.
+        for _ in range(3): # 최대 3번 시도
+            random_playlist = random.choice(playlists)
+            playlist_id = random_playlist['id']
+            tracks_results = sp_client.playlist_items(playlist_id, limit=50)
+            
+            if not tracks_results or 'items' not in tracks_results:
+                continue # (NoneType 오류 방지) 다음 플레이리스트로 넘어감
+
+            tracks = []
+            for item in tracks_results['items']:
+                 # ⭐️⭐️⭐️ Spotify 오류 수정 (2) ⭐️⭐️⭐️
+                 # 'track'가 None이 아니고, 'track'안에 'artists'와 'name'이 있는지 확인
+                 if item and item.get('track') and item['track'].get('artists') and item['track'].get('name'):
+                     # 아티스트 목록이 비어있지 않은지 확인
+                     if item['track']['artists'] and item['track']['artists'][0].get('name'):
+                         tracks.append(item['track'])
+            
+            if tracks: # 유효한 트랙을 찾았으면
+                random_tracks = random.sample(tracks, min(3, len(tracks)))
+                return [f"{track['name']} - {track['artists'][0]['name']}" for track in random_tracks]
+
+        # 3번 시도해도 못 찾으면
+        return ["추천할 만한 노래를 찾지 못했습니다. (플레이리스트 문제)"]
+
     except Exception as e: 
         return [f"Spotify AI 검색 오류: {e}"]
 
+# ⭐️ TMDB 추천 로직을 "랜덤"으로 변경
 def get_tmdb_recommendations(emotion):
     tmdb_creds = st.secrets.get("tmdb", {})
     current_tmdb_key = tmdb_creds.get("api_key", "")
-    
     if not current_tmdb_key:
         return ["TMDB 연결에 실패했습니다. API 키를 확인해주세요."]
         
@@ -155,10 +175,20 @@ def get_tmdb_recommendations(emotion):
         response = requests.get(endpoint, params=params)
         response.raise_for_status()
         data = response.json()
+        
+        # ⭐️⭐️⭐️ TMDB 추천 로직 수정 (Top3 -> Top20 중 랜덤 3) ⭐️⭐️⭐️
         if data.get('results'):
-            top_movies = data['results'][:3]
+            popular_movies = data['results'] # Top 20 영화 목록
+            
+            # 목록이 3편보다 적으면 그냥 다 보여줌
+            if len(popular_movies) <= 3:
+                selected_movies = popular_movies
+            else:
+                # 3편보다 많으면, 그 중에서 3편을 랜덤으로 뽑음
+                selected_movies = random.sample(popular_movies, 3) 
+                
             recommendations = []
-            for movie in top_movies:
+            for movie in selected_movies:
                 title = movie['title']
                 date = movie['release_date'][:4] if movie.get('release_date') else "N/A"
                 rating = movie['vote_average']
@@ -178,17 +208,13 @@ def recommend(final_emotion):
 st.set_page_config(layout="wide")
 st.title("MOODIARY 💖")
 
-# ⭐️ (1) 모델 로드를 UI에서 분리
 model, tokenizer, device, post_processing_map = load_kobert_model()
-
-# ⭐️ (2) "시스템 상태 확인" expander 전체 삭제
 
 if 'diary_text' not in st.session_state: st.session_state.diary_text = ""
 if 'final_emotion' not in st.session_state: st.session_state.final_emotion = None
 
 col1, col2 = st.columns([3, 1])
 with col1:
-    # ⭐️ (3) Markdown을 사용해 라벨 텍스트 크기 키우기
     st.markdown("### 오늘의 일기를 작성해주세요:")
     st.text_area(
         "오늘의 일기를 작성해주세요:",
@@ -199,8 +225,6 @@ with col1:
     
 with col2:
     st.write(" "); st.write(" ")
-    
-    # ⭐️ (4) "랜덤 일기 생성" 버튼 삭제
     
     def handle_analyze_click():
         diary_content = st.session_state.diary_text
@@ -223,11 +247,6 @@ if st.session_state.final_emotion:
     final_emotion = st.session_state.final_emotion
     st.subheader(f"오늘 하루의 핵심 감정은 '{final_emotion}' 입니다.")
     
-    # ⭐️ (5) "감정 신뢰도" progress bar 삭제
-    
-    # ⭐️⭐️⭐️ 1. "오늘 하루를 종합해 보면..." st.success 문장 삭제 ⭐️⭐️⭐️
-    # st.success(f"오늘 하루를 종합해 보면, **'{final_emotion}'**의 감정이 가장 컸네요!")
-    
     st.divider()
     st.subheader(f"'{final_emotion}' 감정을 위한 오늘의 Moodiary 추천")
     with st.spinner(f"'{final_emotion}'에 맞는 추천 항목을 찾고 있습니다..."):
@@ -236,14 +255,12 @@ if st.session_state.final_emotion:
     rec_col1, rec_col2 = st.columns(2)
     
     with rec_col1:
-        # ⭐️⭐️⭐️ 2. 추천 제목 글씨 크기 키우기 ⭐️⭐️⭐️
         st.markdown("#### 🎵 이런 음악도 들어보세요?")
         if recs['음악']:
             for item in recs['음악']: st.write(f"- {item}")
         else: st.write("- 추천을 찾지 못했어요.")
         
     with rec_col2:
-        # ⭐️⭐️⭐️ 2. 추천 제목 글씨 크기 키우기 ⭐️⭐️⭐️
         st.markdown("#### 🎬 이런 영화도 추천해요?")
         if recs['영화']:
             for item in recs['영화']: st.write(f"- {item}")
