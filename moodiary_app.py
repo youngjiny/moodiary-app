@@ -4,6 +4,7 @@ import random
 import requests
 import torch
 from transformers import AutoModelForSequenceClassification, AutoTokenizer, AutoConfig
+import time # (Spotify 재시도를 위해 추가)
 
 # (선택) Spotify SDK
 try:
@@ -14,8 +15,8 @@ except Exception:
     SpotifyClientCredentials = None
 
 # --- 2) 기본 설정 ---
-KOBERT_BASE_MODEL = "monologg/kobert"                # 토크나이저/베이스
-KOBERT_SAVED_REPO = "Young-jin/kobert-moodiary-app"  # 학습 가중치(HF)
+KOBERT_BASE_MODEL = "monologg/kobert"
+KOBERT_SAVED_REPO = "Young-jin/kobert-moodiary-app" # 학습 가중치(HF)
 TMDB_BASE_URL = "https://api.themoviedb.org/3"
 
 st.set_page_config(layout="wide")
@@ -96,7 +97,8 @@ def get_spotify_client():
         return None
     try:
         manager = SpotifyClientCredentials(client_id=cid, client_secret=secret)
-        return spotipy.Spotify(client_credentials_manager=manager)
+        # ⭐️ 재시도 로직 추가
+        return spotipy.Spotify(client_credentials_manager=manager, retries=3, status_retries=3, backoff_factor=0.3)
     except Exception:
         return None
 
@@ -133,7 +135,6 @@ def get_spotify_ai_recommendations(emotion):
             cover = images[0]["url"] if images else None
             year = (album.get("release_date") or "2005")[:4]
 
-            # 한국어 포함 & 2015년 이후 곡만
             if int(year) >= 2015 and (is_korean(name) or is_korean(artist)):
                 valid.append({"title": name, "artist": artist, "cover": cover})
 
@@ -143,6 +144,7 @@ def get_spotify_ai_recommendations(emotion):
             pls = (fallback.get("playlists") or {}).get("items") or []
             for pl in pls:
                 pid = pl.get("id")
+                if not pid: continue # ⭐️ 방어 코드
                 items = (sp.playlist_items(pid, limit=50, market="KR") or {}).get("items") or []
                 for it in items:
                     tr = (it or {}).get("track") or {}
@@ -175,7 +177,9 @@ def get_spotify_ai_recommendations(emotion):
 
         # 항상 최소 1곡 이상 보장
         if not valid:
-            return [{"title": "그날들", "artist": "이문세", "cover": None}]
+            return [{"title": "추천 없음", "artist": "Spotify API 문제", "cover": None}]
+        
+        # ⭐️ 1. 음악 3개씩 추천 (요청사항 반영)
         return random.sample(valid, k=min(3, len(valid)))
 
     except Exception as e:
@@ -183,11 +187,12 @@ def get_spotify_ai_recommendations(emotion):
 
 
 
-# --- 7) TMDB 추천 (포스터 포함) ---
+# --- 7) TMDB 추천 (포스터 + ⭐️줄거리 포함) ---
 def get_tmdb_recommendations(emotion):
     key = st.secrets.get("tmdb", {}).get("api_key", "")
     if not key:
-        return ["TMDB 연결에 실패했습니다. API 키를 확인해주세요."]
+        # ⭐️ 반환 형식을 딕셔너리로 통일
+        return [{"text": "TMDB 연결에 실패했습니다. API 키를 확인해주세요.", "poster": None, "overview": ""}]
 
     GENRES = {
         "행복": "35|10749|10751|10402|16",
@@ -198,7 +203,7 @@ def get_tmdb_recommendations(emotion):
     }
     g = GENRES.get(emotion)
     if not g:
-        return [f"[{emotion}]에 대한 장르 맵핑이 없습니다."]
+        return [{"text": f"[{emotion}]에 대한 장르 맵핑이 없습니다.", "poster": None, "overview": ""}]
 
     try:
         r = requests.get(
@@ -217,7 +222,7 @@ def get_tmdb_recommendations(emotion):
         results = r.json().get("results", [])
 
         if not results:
-            return [f"[{emotion}] 관련 영화를 찾지 못했습니다."]
+            return [{"text": f"[{emotion}] 관련 영화를 찾지 못했습니다.", "poster": None, "overview": ""}]
 
         picks = results if len(results) <= 3 else random.sample(results, 3)
         out = []
@@ -226,16 +231,23 @@ def get_tmdb_recommendations(emotion):
             year = (m.get("release_date") or "")[:4] or "N/A"
             rating = m.get("vote_average", 0.0)
             poster = f"https://image.tmdb.org/t/p/w500{m['poster_path']}" if m.get("poster_path") else None
+            
+            # ⭐️⭐️⭐️ 3. 영화 줄거리 추가 (요청사항 반영) ⭐️⭐️⭐️
+            overview = m.get("overview", "줄거리 정보가 없습니다.")
+            if not overview: # overview가 "" (빈 문자열)일 경우 대비
+                overview = "줄거리 정보가 없습니다."
+                
             out.append({
                 "text": f"{title} ({year}) (평점: {rating:.1f})",
                 "poster": poster,
                 "title": title,
                 "year": year,
-                "rating": rating
+                "rating": rating,
+                "overview": overview # ⭐️ 줄거리 정보 추가
             })
         return out
     except Exception as e:
-        return [f"TMDb 오류: {type(e).__name__}: {e}"]
+        return [{"text": f"TMDb 오류: {type(e).__name__}: {e}", "poster": None, "overview": ""}]
 
 # --- 8) 통합 추천 ---
 def recommend(emotion):
@@ -305,7 +317,7 @@ if st.session_state.final_emotion:
                         img_c.empty()
                     title = it.get("title", "제목없음")
                     artist = it.get("artist", "Unknown")
-                    txt_c.markdown(f"**{title}**  \n{artist}")
+                    txt_c.markdown(f"**{title}** \n{artist}")
                     st.markdown("---")
                 else:
                     st.write(f"- {it}")
@@ -322,15 +334,24 @@ if st.session_state.final_emotion:
                     img_c, txt_c = st.columns([1, 4])
                     poster = it.get("poster")
                     if poster:
-                        img_c.image(poster, width=80)
+                        # ⭐️⭐️⭐️ 2. 영화 표지 크기 키우기 (요청사항 반영) ⭐️⭐️⭐️
+                        img_c.image(poster, width=160)
                     else:
                         img_c.empty()
-                    line = it.get("text")
-                    if not line:
-                        title = it.get("title", "제목없음")
-                        year = it.get("year", "N/A")
-                        rating = float(it.get("rating", 0.0))
-                        line = f"**{title} ({year})**  \n⭐ {rating:.1f}"
+                    
+                    # ⭐️⭐️⭐️ 3. 영화 줄거리 표시 (요청사항 반영) ⭐️⭐️⭐️
+                    title = it.get("title", "제목없음")
+                    year = it.get("year", "N/A")
+                    rating = float(it.get("rating", 0.0))
+                    overview = it.get("overview", "")
+                    
+                    # 줄거리 80자로 자르기
+                    if len(overview) > 80:
+                        overview = overview[:80] + "..."
+                    
+                    # 텍스트 조합
+                    line = f"**{title} ({year})** \n⭐ {rating:.1f}  \n*{overview}*"
+                    
                     txt_c.markdown(line)
                     st.markdown("---")
                 else:
