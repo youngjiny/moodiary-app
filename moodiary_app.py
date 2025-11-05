@@ -100,59 +100,101 @@ def get_spotify_client():
     except Exception:
         return None
 
-# --- 6) ⭐️ Spotify 추천 (로직 변경: "감정별 공식 차트" 매핑) ---
+# --- 6) ⭐️ Spotify 추천 (404 오류 방지) ---
 def get_spotify_ai_recommendations(emotion):
     sp = get_spotify_client()
     if not sp:
         return ["Spotify 연결 실패 (Secrets 누락 또는 클라이언트 초기화 실패)"]
 
-    # ⭐️⭐️⭐️ "센스 있는" 추천을 위해, "감정별 공식/인기 큐레이션"으로 변경 ⭐️⭐️⭐️
-    CHART_PLAYLISTS = {
-        # (행복/놀람) -> K-Pop 대표 히트곡
-        "행복": "37i9dQZEVXbJxxNsEk86S4", # K-Pop ON! (K-Pop On)
-        "놀람": "37i9dQZEVXbJxxNsEk86S4", # K-Pop ON! (K-Pop On)
-        
-        # (슬픔) -> K-Pop 발라드
-        "슬픔": "37i9dQZF1DXa29a0n9wGgC", # K-Pop Ballad Hits
-        
-        # (분노) -> K-Rock
-        "분노": "37i9dQZF1DXdfhOsjPtoaS", # K-Rock Anthems
-        
-        # (힘듦) -> 힐링/위로
-        "힘듦": "37i9dQZF1DXdls6m8FLMpo"  # Relax & Unwind K-Pop
+    def is_korean(txt):
+        return isinstance(txt, str) and any('가' <= ch <= '힣' for ch in txt)
+
+    KR_KEYWORDS = {
+        "행복": ["케이팝 최신", "국내 신나는 노래", "여름 노래", "K-pop happy"],
+        "슬픔": ["발라드 최신", "이별 노래", "감성 케이팝", "K-ballad"],
+        "분노": ["운동 음악", "락", "파워 송", "K-rock"],
+        "힘듦": ["위로 노래", "힐링 케이팝", "잔잔한 팝"],
+        "놀람": ["파티 케이팝", "EDM 케이팝", "페스티벌 음악"],
     }
-    
-    # 해당 감정의 차트를 가져오되, 없으면 K-Pop ON!을 기본값으로
-    playlist_id = CHART_PLAYLISTS.get(emotion, "37i9dQZEVXbJxxNsEk86S4")
+
+    query = random.choice(KR_KEYWORDS.get(emotion, ["케이팝 최신"])) + " year:2015-2025"
+    last_exception = None # 마지막 오류 저장용
 
     try:
-        # 1️⃣ 플레이리스트 트랙 가져오기 (50곡)
-        tracks_results = sp.playlist_items(playlist_id, limit=50, market="KR")
-        if not tracks_results or 'items' not in tracks_results:
-             return ["Spotify 공식 차트를 불러오지 못했습니다."]
-
+        # 1️⃣ 트랙 직접 검색 (최신 & 한국어 필터)
+        res = sp.search(q=query, type="track", limit=50, market="KR")
+        tracks = (res.get("tracks") or {}).get("items") or []
         valid = []
-        for item in tracks_results['items']:
-            track = item.get('track')
-            # ⭐️ (NoneType 오류 방지 코드 포함)
-            if track and track.get('artists') and track.get('name'):
-                artists = track.get("artists") or []
+        for t in tracks:
+            name = t.get("name")
+            artists = t.get("artists") or []
+            artist = artists[0].get("name") if artists else "Unknown"
+            album = t.get("album") or {}
+            images = album.get("images") or []
+            cover = images[0]["url"] if images else None
+            year = (album.get("release_date") or "2005")[:4]
+
+            if int(year) >= 2015 and (is_korean(name) or is_korean(artist)):
+                valid.append({"title": name, "artist": artist, "cover": cover})
+
+        # 2️⃣ 만약 없으면 그냥 최신 케이팝 플레이리스트에서 가져오기
+        if not valid:
+            fallback = sp.search(q="K-pop Hits Korea 2020-2025", type="playlist", limit=10, market="KR")
+            pls = (fallback.get("playlists") or {}).get("items") or []
+            for pl in pls:
+                pid = pl.get("id")
+                if not pid: continue 
+                
+                # ⭐️⭐️⭐️ 404 오류 방지 수정 ⭐️⭐️⭐️
+                try:
+                    items = (sp.playlist_items(pid, limit=50, market="KR") or {}).get("items") or []
+                except spotipy.exceptions.SpotifyException as se:
+                    # 404 (Not Found) 오류가 발생하면, 이 플레이리스트를 건너뛰고 다음 것을 시도
+                    if se.http_status == 404:
+                        continue 
+                    else:
+                        last_exception = se # 다른 종류의 오류면 저장
+                        continue # 일단 다음 플레이리스트로
+                # ⭐️⭐️⭐️ 수정 끝 ⭐️⭐️⭐️
+
+                for it in items:
+                    tr = (it or {}).get("track") or {}
+                    if not tr:
+                        continue
+                    name = tr.get("name")
+                    artists = tr.get("artists") or []
+                    artist = artists[0].get("name") if artists else "Unknown"
+                    album = tr.get("album") or {}
+                    images = album.get("images") or []
+                    cover = images[0]["url"] if images else None
+                    if name:
+                        valid.append({"title": name, "artist": artist, "cover": cover})
+                if valid:
+                    break 
+
+        # 3️⃣ 그래도 없으면 전세계 최신 TOP 트랙 fallback
+        if not valid:
+            top = sp.search(q="top hits 2024", type="track", limit=50, market="KR")
+            titems = (top.get("tracks") or {}).get("items") or []
+            for t in titems:
+                name = t.get("name")
+                artists = t.get("artists") or []
                 artist = artists[0].get("name") if artists else "Unknown"
-                album = track.get("album") or {}
+                album = t.get("album") or {}
                 images = album.get("images") or []
                 cover = images[0]["url"] if images else None
-                if track['artists'] and track['artists'][0].get('name'):
-                    valid.append({"title": track['name'], "artist": artist, "cover": cover})
-        
-        # 2️⃣ 유효한 트랙이 없으면
+                if name:
+                    valid.append({"title": name, "artist": artist, "cover": cover})
+
         if not valid:
-            return ["차트에서 노래를 읽어오지 못했습니다."]
+            return [{"title": "추천 없음", "artist": "Spotify API 문제", "cover": None}]
         
-        # 3️⃣ 50곡 중 3곡을 랜덤으로 뽑아 반환
         return random.sample(valid, k=min(3, len(valid)))
 
     except Exception as e:
-        return [f"Spotify 추천 오류: {type(e).__name__}: {e}"]
+        last_exception = e
+        return [f"Spotify AI 검색 오류: {type(last_exception).__name__}: {last_exception}"]
+
 
 
 # --- 7) TMDB 추천 (포스터 + 줄거리 포함) ---
