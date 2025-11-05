@@ -100,7 +100,7 @@ def get_spotify_client():
     except Exception:
         return None
 
-# --- 6) ⭐️ Spotify 추천 (안정적인 "검색 + 404 방어" 로직) ---
+# --- 6) ⭐️ Spotify 추천 (로직 변경: "키워드 검색 + 404 방어"로 복귀) ---
 def get_spotify_ai_recommendations(emotion):
     sp = get_spotify_client()
     if not sp:
@@ -109,20 +109,20 @@ def get_spotify_ai_recommendations(emotion):
     def is_korean(txt):
         return isinstance(txt, str) and any('가' <= ch <= '힣' for ch in txt)
 
-    # ⭐️ "센스 있는" 키워드로 검색 (고객님 아이디어 + 이전 코드)
+    # ⭐️ 고객님이 좋아하셨던 "센스 있는" 키워드 검색 로직
     KR_KEYWORDS = {
-        "행복": ["K-Pop Happy Hits", "국내 신나는 노래", "여름 노래", "K-pop happy"],
-        "슬픔": ["K-Pop Ballad Hits", "이별 노래", "감성 케이팝", "K-ballad"],
-        "분노": ["K-Rock Anthems", "운동 음악", "파워 송", "K-rock"],
-        "힘듦": ["Relax & Unwind K-Pop", "위로 노래", "힐링 케이팝", "잔잔한 팝"],
-        "놀람": ["K-Pop Party", "EDM 케이팝", "페스티벌 음악"],
+        "행복": ["케이팝 최신", "국내 신나는 노래", "여름 노래", "K-pop happy"],
+        "슬픔": ["발라드 최신", "이별 노래", "감성 케이팝", "K-ballad"],
+        "분노": ["운동 음악", "락", "파워 송", "K-rock"],
+        "힘듦": ["위로 노래", "힐링 케이팝", "잔잔한 팝"],
+        "놀람": ["파티 케이팝", "EDM 케이팝", "페스티벌 음악"],
     }
 
-    query = random.choice(KR_KEYWORDS.get(emotion, ["K-Pop ON"]))
+    query = random.choice(KR_KEYWORDS.get(emotion, ["케이팝 최신"])) + " year:2015-2025"
     last_exception = None # 마지막 오류 저장용
 
     try:
-        # 1️⃣ 트랙 직접 검색 (최신 & 한국어 필터) - (이 방식은 안정적)
+        # 1️⃣ 트랙 직접 검색 (최신 & 한국어 필터)
         res = sp.search(q=query, type="track", limit=50, market="KR")
         tracks = (res.get("tracks") or {}).get("items") or []
         valid = []
@@ -133,28 +133,29 @@ def get_spotify_ai_recommendations(emotion):
             album = t.get("album") or {}
             images = album.get("images") or []
             cover = images[0]["url"] if images else None
-            if name and (is_korean(name) or is_korean(artist)):
+            year = (album.get("release_date") or "2005")[:4]
+
+            if int(year) >= 2015 and (is_korean(name) or is_korean(artist)):
                 valid.append({"title": name, "artist": artist, "cover": cover})
 
-        # 2️⃣ 만약 트랙 검색 결과가 없으면, "플레이리스트" 검색으로 fallback
+        # 2️⃣ 만약 없으면 그냥 최신 케이팝 플레이리스트에서 가져오기
         if not valid:
-            fallback = sp.search(q=query, type="playlist", limit=10, market="KR")
+            fallback = sp.search(q="K-pop Hits Korea 2020-2025", type="playlist", limit=10, market="KR")
             pls = (fallback.get("playlists") or {}).get("items") or []
             for pl in pls:
                 pid = pl.get("id")
                 if not pid: continue 
                 
-                # ⭐️⭐️⭐️ 404 오류 방지 (try...except 추가) ⭐️⭐️⭐️
+                # ⭐️ 404 오류 방지 (try...except 추가)
                 try:
                     items = (sp.playlist_items(pid, limit=50, market="KR") or {}).get("items") or []
                 except spotipy.exceptions.SpotifyException as se:
-                    # 404 (Not Found) 오류가 발생하면, 이 플레이리스트를 건너뛰고 다음 것을 시도
                     if se.http_status == 404:
                         continue 
                     else:
                         last_exception = se 
                         continue 
-                # ⭐️⭐️⭐️ 수정 끝 ⭐️⭐️⭐️
+                # ⭐️ 수정 끝
 
                 for it in items:
                     tr = (it or {}).get("track") or {}
@@ -173,7 +174,7 @@ def get_spotify_ai_recommendations(emotion):
 
         # 3️⃣ 그래도 없으면 전세계 최신 TOP 트랙 fallback
         if not valid:
-            top = sp.search(q="Top Hits Korea", type="track", limit=50, market="KR")
+            top = sp.search(q="top hits 2024", type="track", limit=50, market="KR")
             titems = (top.get("tracks") or {}).get("items") or []
             for t in titems:
                 name = t.get("name")
@@ -291,7 +292,7 @@ def handle_analyze_click():
 
 st.button("🔍 내 하루 감정 분석하기", type="primary", on_click=handle_analyze_click)
 
-# --- 10) 결과/추천 출력 (UI 수정) ---
+# --- 10) ⭐️ 결과/추천 출력 (UI 레이아웃 수정) ---
 if st.session_state.final_emotion:
     emo = st.session_state.final_emotion
     sc = st.session_state.confidence
@@ -307,7 +308,7 @@ if st.session_state.final_emotion:
 
     col_music, col_movie = st.columns(2)
 
-    # 음악 (앨범 커버 + 텍스트)
+    # ⭐️ 음악 (UI 수정: 이미지 위, 텍스트 아래)
     with col_music:
         st.markdown("#### 🎵 이런 음악도 들어보세요?")
         items = recs.get("음악", [])
@@ -316,19 +317,20 @@ if st.session_state.final_emotion:
                 if isinstance(it, dict):
                     cover = it.get("cover")
                     if cover:
+                        # ⭐️ 표지 크기 160으로 통일
                         st.image(cover, width=160) 
-                    else:
-                        st.empty()
+                    
                     title = it.get("title", "제목없음")
                     artist = it.get("artist", "Unknown")
                     st.markdown(f"##### **{title}**\n{artist}")
                     st.markdown("---")
                 else:
+                    # (오류 메시지 출력용)
                     st.write(f"- {it}")
         else:
             st.write("- 추천을 찾지 못했어요.")
 
-    # 영화 (포스터 + 텍스트)
+    # ⭐️ 영화 (UI 수정: 이미지 위, 텍스트 아래)
     with col_movie:
         st.markdown("#### 🎬 이런 영화도 추천해요?")
         items = recs.get("영화", [])
@@ -338,22 +340,20 @@ if st.session_state.final_emotion:
                     poster = it.get("poster")
                     if poster:
                         st.image(poster, width=160)
-                    else:
-                        st.empty()
                     
                     title = it.get("title", "제목없음")
                     year = it.get("year", "N/A")
                     rating = float(it.get("rating", 0.0))
-                    overview = it.get("overview", "")
                     
-                    if len(overview) > 150:
-                        overview = overview[:150] + "..."
+                    # ⭐️ 줄거리 (잘리지 않고 원본)
+                    overview = it.get("overview", "") 
                     
                     line = f"##### **{title} ({year})**\n⭐ {rating:.1f}\n\n*{overview}*"
                     
                     st.markdown(line)
                     st.markdown("---")
                 else:
+                    # (오류 메시지 출력용)
                     st.write(f"- {it}")
         else:
             st.write("- 추천을 찾지 못했어요.")
