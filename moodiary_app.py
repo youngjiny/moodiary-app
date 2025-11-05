@@ -101,7 +101,7 @@ def get_spotify_client():
         st.error(f"Spotify 로그인 오류: {e}")
         return None
 
-# --- 6. 추천 함수 (TMDB 장르 맵 "치유형"으로 수정) ---
+# --- 6. 추천 함수 (TMDB "치유형" 장르 + 책 추천 제거) ---
 def get_spotify_ai_recommendations(emotion):
     sp_client = get_spotify_client()
     if not sp_client: return ["Spotify 연결 실패 (클라이언트 초기화 실패)"]
@@ -137,15 +137,10 @@ def get_tmdb_recommendations(emotion):
     if not current_tmdb_key:
         return ["TMDB API 키가 설정되지 않았습니다. (Secrets[tmdb][api_key] 읽기 실패)"]
         
-    # ⭐️⭐️⭐️ 중요: 고객님 의견 반영, "치유" 및 "기분전환"용 장르로 수정 ⭐️⭐️⭐️
+    # "치유" 및 "기분전환"용 장르
     TMDB_GENRE_MAP = {
-        # 행복 (극대화): 코미디, 로맨스, 가족, 음악, 애니메이션 (기존 유지, 좋음)
         "행복": "35|10749|10751|10402|16",
-        
-        # 분노 (스트레스 해소): 액션, 모험, 코미디, SF
         "분노": "28|12|35|878",
-        
-        # 슬픔, 힘듦, 놀람 (위로/안정): 코미디, 가족, 애니메이션, 판타지 (따뜻한 장르)
         "슬픔": "35|10751|16|14",
         "힘듦": "35|10751|16|14",
         "놀람": "35|10751|16|14"
@@ -178,20 +173,17 @@ def get_tmdb_recommendations(emotion):
     except requests.exceptions.RequestException as e:
         return [f"TMDb API 호출 실패: {e}"]
 
-def recommend(final_emotion, method):
+# ⭐️⭐️⭐️ "책 추천" 제거, "method" 인자 제거 ⭐️⭐️⭐️
+def recommend(final_emotion):
     music_recs = get_spotify_ai_recommendations(final_emotion)
     movie_recs = get_tmdb_recommendations(final_emotion)
-    book_recommendations = {
-        "행복": ["기분을 관리하면 인생이 관리된다"], "슬픔": ["아몬드"], 
-        "분노": ["분노의 심리학"], "힘듦": ["죽고 싶지만 떡볶이는 먹고 싶어"], 
-        "놀람": ["데미안"],
-    }
-    book_recs = book_recommendations.get(final_emotion, [])
-    return {'책': book_recs, '음악': music_recs, '영화': movie_recs}
+    # (책 추천 로직 삭제)
+    return {'음악': music_recs, '영화': movie_recs} # <--- 책 추천 반환값 삭제
 
-# --- 7. Streamlit UI 구성 (변경 없음) ---
+# --- 7. Streamlit UI 구성 (UI 수정) ---
 st.set_page_config(layout="wide")
-st.title("Moodiary 📝 감정 일기 (KoBERT Ver.)")
+# ⭐️⭐️⭐️ 1. 제목 수정 ⭐️⭐️⭐️
+st.title("MOODIARY 💖")
 
 with st.expander("⚙️ 시스템 상태 확인"):
     with st.spinner("Hugging Face Hub에서 AI 모델을 불러오는 중입니다..."):
@@ -215,14 +207,15 @@ st.divider()
 if 'diary_text' not in st.session_state: st.session_state.diary_text = ""
 if 'final_emotion' not in st.session_state: st.session_state.final_emotion = None
 if 'confidence_score' not in st.session_state: st.session_state.confidence_score = 0.0
-if 'rec_method' not in st.session_state: st.session_state.rec_method = '내 플레이리스트'
+# ⭐️ 'rec_method' 세션 상태 제거 (불필요)
 
 col1, col2 = st.columns([3, 1])
 with col1:
     st.text_area("오늘의 일기를 작성해주세요:", key='diary_text', height=250)
 with col2:
     st.write(" "); st.write(" ")
-    st.radio("음악 추천 방식 선택", ('내 플레이리스트', 'AI 자동 추천'), key='rec_method', horizontal=True)
+    # ⭐️⭐️⭐️ 2. 음악 추천 라디오 버튼 삭제 ⭐️⭐️⭐️
+    # st.radio("음악 추천 방식 선택", ('내 플레이리스트', 'AI 자동 추천'), key='rec_method', horizontal=True)
     
     def handle_random_click():
         sample_diaries = [
@@ -252,6 +245,8 @@ with col2:
                 )
                 st.session_state.final_emotion = emotion
                 st.session_state.confidence_score = score
+                
+    # ⭐️⭐️⭐️ 3. "내 하루 감정 분석하기" 버튼 (기능은 동일) ⭐️⭐️⭐️
     st.button("🔍 내 하루 감정 분석하기", type="primary", on_click=handle_analyze_click)
 
 if st.session_state.final_emotion:
@@ -263,19 +258,23 @@ if st.session_state.final_emotion:
     st.divider()
     st.subheader(f"'{final_emotion}' 감정을 위한 오늘의 Moodiary 추천")
     with st.spinner(f"'{final_emotion}'에 맞는 추천 항목을 찾고 있습니다..."):
-        recs = recommend(final_emotion, st.session_state.rec_method)
-    rec_col1, rec_col2, rec_col3 = st.columns(3)
+        # ⭐️⭐️⭐️ 3. 'method' 인자 제거 ⭐️⭐️⭐️
+        recs = recommend(final_emotion)
+        
+    # ⭐️⭐️⭐️ 4. 컬럼을 3개에서 2개로 수정 ⭐️⭐️⭐️
+    rec_col1, rec_col2 = st.columns(2)
+    
+    # ⭐️ (rec_col1이었던) 책 추천 컬럼 완전 삭제
+    
+    # ⭐️ (rec_col2였던) 음악 컬럼을 rec_col1로 변경
     with rec_col1:
-        st.write("📚 **이런 책은 어때요?**")
-        if recs['책']:
-            for item in recs['책']: st.write(f"- {item}")
-        else: st.write("- 추천을 찾지 못했어요.")
-    with rec_col2:
         st.write("🎵 **이런 음악도 들어보세요?**")
         if recs['음악']:
             for item in recs['음악']: st.write(f"- {item}")
         else: st.write("- 추천을 찾지 못했어요.")
-    with rec_col3:
+        
+    # ⭐️ (rec_col3이었던) 영화 컬럼을 rec_col2로 변경
+    with rec_col2:
         st.write("🎬 **이런 영화도 추천해요?**")
         if recs['영화']:
             for item in recs['영화']: st.write(f"- {item}")
