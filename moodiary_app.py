@@ -101,7 +101,7 @@ def get_spotify_client():
     except Exception:
         return None
 
-# --- 6) ⭐️ Spotify 추천 (track_id 추가) ---
+# --- 6) ⭐️ Spotify 추천 (로직 복귀: "키워드 검색" + 404/NoneType 방어) ---
 def get_spotify_ai_recommendations(emotion):
     sp = get_spotify_client()
     if not sp:
@@ -110,6 +110,7 @@ def get_spotify_ai_recommendations(emotion):
     def is_korean(txt):
         return isinstance(txt, str) and any('가' <= ch <= '힣' for ch in txt)
 
+    # ⭐️ 고객님이 좋아하셨던 "센스 있는" 키워드 검색 로직
     KR_KEYWORDS = {
         "행복": ["케이팝 최신", "국내 신나는 노래", "여름 노래", "K-pop happy"],
         "슬픔": ["발라드 최신", "이별 노래", "감성 케이팝", "K-ballad"],
@@ -122,23 +123,26 @@ def get_spotify_ai_recommendations(emotion):
     last_exception = None 
 
     try:
+        # 1️⃣ 트랙 직접 검색 (최신 & 한국어 필터)
         res = sp.search(q=query, type="track", limit=50, market="KR")
         tracks = (res.get("tracks") or {}).get("items") or []
         valid = []
         for t in tracks:
-            track_id = t.get("id") # ⭐️ 1. 트랙 ID 가져오기
+            track_id = t.get("id")
             name = t.get("name")
             artists = t.get("artists") or []
             artist = artists[0].get("name") if artists else "Unknown"
             if track_id and name and (is_korean(name) or is_korean(artist)):
-                valid.append({"title": name, "artist": artist, "id": track_id}) # ⭐️ 2. ID 반환
+                valid.append({"title": name, "artist": artist, "id": track_id}) # ⭐️ id 반환
 
+        # 2️⃣ 만약 없으면 그냥 최신 케이팝 플레이리스트에서 가져오기
         if not valid:
             fallback = sp.search(q="K-pop Hits Korea 2020-2025", type="playlist", limit=10, market="KR")
             pls = (fallback.get("playlists") or {}).get("items") or []
             for pl in pls:
                 pid = pl.get("id")
                 if not pid: continue 
+                
                 try:
                     items = (sp.playlist_items(pid, limit=50, market="KR") or {}).get("items") or []
                 except spotipy.exceptions.SpotifyException as se:
@@ -147,29 +151,31 @@ def get_spotify_ai_recommendations(emotion):
                     else:
                         last_exception = se 
                         continue 
+                
                 for it in items:
                     tr = (it or {}).get("track") or {}
                     if not tr:
                         continue
-                    track_id = tr.get("id") # ⭐️ 1. 트랙 ID 가져오기
+                    track_id = tr.get("id")
                     name = tr.get("name")
                     artists = tr.get("artists") or []
                     artist = artists[0].get("name") if artists else "Unknown"
                     if track_id and name:
-                        valid.append({"title": name, "artist": artist, "id": track_id}) # ⭐️ 2. ID 반환
+                        valid.append({"title": name, "artist": artist, "id": track_id}) # ⭐️ id 반환
                 if valid:
                     break 
 
+        # 3️⃣ 그래도 없으면 전세계 최신 TOP 트랙 fallback
         if not valid:
             top = sp.search(q="top hits 2024", type="track", limit=50, market="KR")
             titems = (top.get("tracks") or {}).get("items") or []
             for t in titems:
-                track_id = t.get("id") # ⭐️ 1. 트랙 ID 가져오기
+                track_id = t.get("id")
                 name = t.get("name")
                 artists = t.get("artists") or []
                 artist = artists[0].get("name") if artists else "Unknown"
                 if track_id and name:
-                    valid.append({"title": name, "artist": artist, "id": track_id}) # ⭐️ 2. ID 반환
+                    valid.append({"title": name, "artist": artist, "id": track_id}) # ⭐️ id 반환
 
         if not valid:
             return [{"title": "추천 없음", "artist": "Spotify API 문제", "id": None}]
@@ -179,6 +185,7 @@ def get_spotify_ai_recommendations(emotion):
     except Exception as e:
         last_exception = e
         return [f"Spotify AI 검색 오류: {type(last_exception).__name__}: {last_exception}"]
+
 
 # --- 7) TMDB 추천 (포스터 + 줄거리 포함) ---
 def get_tmdb_recommendations(emotion):
@@ -331,6 +338,8 @@ if st.session_state.final_emotion:
                     title = it.get("title", "제목없음")
                     year = it.get("year", "N/A")
                     rating = float(it.get("rating", 0.0))
+                    
+                    # ⭐️ 줄거리 (잘리지 않음)
                     overview = it.get("overview", "") 
                     
                     line = f"##### **{title} ({year})**\n⭐ {rating:.1f}\n\n*{overview}*"
