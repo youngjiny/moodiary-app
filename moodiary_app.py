@@ -153,7 +153,7 @@ def get_tmdb_recommendations(emotion):
     current_tmdb_key = tmdb_creds.get("api_key", "")
     if not current_tmdb_key:
         return ["TMDB 연결에 실패했습니다. API 키를 확인해주세요."]
-        
+
     TMDB_GENRE_MAP = {
         "행복": "35|10749|10751|10402|16",
         "분노": "28|12|35|878",
@@ -164,45 +164,42 @@ def get_tmdb_recommendations(emotion):
     genre_ids_string = TMDB_GENRE_MAP.get(emotion)
     if not genre_ids_string:
         return [f"[{emotion}]에 대한 장르 맵핑이 없습니다."]
-    
-    endpoint = f"https://api.themoviedb.org/3/discover/movie"
+
+    endpoint = "https://api.themoviedb.org/3/discover/movie"
     params = {
         "api_key": current_tmdb_key,
-        "language": "ko-KR", "sort_by": "popularity.desc",
-        "with_genres": genre_ids_string, "page": 1, "vote_count.gte": 100
+        "language": "ko-KR",
+        "sort_by": "popularity.desc",
+        "with_genres": genre_ids_string,
+        "page": 1,
+        "vote_count.gte": 100
     }
     try:
         response = requests.get(endpoint, params=params)
         response.raise_for_status()
         data = response.json()
-        
-        # ⭐️⭐️⭐️ TMDB 추천 로직 수정 (Top3 -> Top20 중 랜덤 3) ⭐️⭐️⭐️
-        if data.get('results'):
-            popular_movies = data['results'] # Top 20 영화 목록
-            
-            # 목록이 3편보다 적으면 그냥 다 보여줌
-            if len(popular_movies) <= 3:
-                selected_movies = popular_movies
-            else:
-                # 3편보다 많으면, 그 중에서 3편을 랜덤으로 뽑음
-                selected_movies = random.sample(popular_movies, 3) 
-                
-            recommendations = []
-            for movie in selected_movies:
-                title = movie['title']
-                date = movie['release_date'][:4] if movie.get('release_date') else "N/A"
-                rating = movie['vote_average']
-                recommendations.append(f"{title} ({date}) (평점: {rating:.1f})")
-            return recommendations
-        else:
+
+        if not data.get('results'):
             return [f"[{emotion} 장르]의 인기 영화를 찾지 못했습니다."]
+
+        popular_movies = data['results']
+        selected_movies = popular_movies if len(popular_movies) <= 3 else random.sample(popular_movies, 3)
+
+        recs = []
+        for m in selected_movies:
+            title = m.get('title', '제목없음')
+            year = (m.get('release_date') or '')[:4] or "N/A"
+            rating = m.get('vote_average', 0.0)
+            poster = f"https://image.tmdb.org/t/p/w500{m['poster_path']}" if m.get('poster_path') else None
+            # 기존 표시 문자열을 그대로 유지하면서 포스터만 추가
+            recs.append({
+                "text": f"{title} ({year}) (평점: {rating:.1f})",
+                "poster": poster
+            })
+        return recs
+
     except requests.exceptions.RequestException as e:
         return [f"TMDb API 호출 실패: {e}"]
-
-def recommend(final_emotion):
-    music_recs = get_spotify_ai_recommendations(final_emotion)
-    movie_recs = get_tmdb_recommendations(final_emotion)
-    return {'음악': music_recs, '영화': movie_recs}
 
 # --- 7. Streamlit UI 구성 (최종 클린 버전) ---
 st.set_page_config(layout="wide")
@@ -261,7 +258,15 @@ if st.session_state.final_emotion:
         else: st.write("- 추천을 찾지 못했어요.")
         
     with rec_col2:
-        st.markdown("#### 🎬 이런 영화도 추천해요?")
-        if recs['영화']:
-            for item in recs['영화']: st.write(f"- {item}")
-        else: st.write("- 추천을 찾지 못했어요.")
+    st.markdown("#### 🎬 이런 영화도 추천해요?")
+    if recs['영화']:
+        for item in recs['영화']:
+            if isinstance(item, dict):
+                if item.get("poster"):
+                    st.image(item["poster"], width=160)
+                st.write(f"- {item.get('text','')}")
+            else:
+                # 과거 문자열 반환 대비
+                st.write(f"- {item}")
+    else:
+        st.write("- 추천을 찾지 못했어요.")
