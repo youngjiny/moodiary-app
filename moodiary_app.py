@@ -101,8 +101,8 @@ def get_spotify_client():
     except Exception:
         return None
 
-# --- 6) ⭐️ 추천 로직 (음악/영화 분리) ---
-def recommend_music(emotion): # ⭐️ 함수 이름 변경
+# --- 6) Spotify 추천 (키워드 검색 + 404 방어) ---
+def recommend_music(emotion):
     sp = get_spotify_client()
     if not sp:
         return ["Spotify 연결 실패 (Secrets 누락 또는 클라이언트 초기화 실패)"]
@@ -182,19 +182,27 @@ def recommend_music(emotion): # ⭐️ 함수 이름 변경
         return [f"Spotify AI 검색 오류: {type(last_exception).__name__}: {last_exception}"]
 
 
-# ⭐️ TMDB 추천 (평점 7.5 이상)
-def recommend_movies(emotion): # ⭐️ 함수 이름 변경
+# --- 7) ⭐️ TMDB 추천 (고객님 요청 장르 + 평점 7.5 이상) ---
+def recommend_movies(emotion):
     key = st.secrets.get("tmdb", {}).get("api_key", "")
     if not key:
         return [{"text": "TMDB 연결에 실패했습니다. API 키를 확인해주세요.", "poster": None, "overview": ""}]
 
+    # ⭐️⭐️⭐️ 고객님 요청대로 "감정별 차등 장르" 적용 ⭐️⭐️⭐️
     GENRES = {
-        "행복": "35|10749|10751|10402|16",
+        # 행복: 코미디(35), 로맨스(10749), 가족(10751) + 호러(27)
+        "행복": "35|10749|10751|27",
+        
+        # 분노 (해소): 액션(28), 모험(12), 코미디(35), SF(878)
         "분노": "28|12|35|878",
+        
+        # 슬픔, 힘듦, 놀람 (위로/안정): 코미디(35), 가족(10751), 애니메이션(16), 판타지(14)
         "슬픔": "35|10751|16|14",
         "힘듦": "35|10751|16|14",
         "놀람": "35|10751|16|14",
     }
+    # ⭐️⭐️⭐️ 수정 끝 ⭐️⭐️⭐️
+
     g = GENRES.get(emotion)
     if not g:
         return [{"text": f"[{emotion}]에 대한 장르 맵핑이 없습니다.", "poster": None, "overview": ""}]
@@ -209,7 +217,7 @@ def recommend_movies(emotion): # ⭐️ 함수 이름 변경
                 "with_genres": g,
                 "page": 1,
                 "vote_count.gte": 100,
-                "vote_average.gte": 7.5 # ⭐️ 평점 7.5 필터
+                "vote_average.gte": 7.5 # ⭐️ 평점 7.5 필터 유지
             },
             timeout=10,
         )
@@ -242,7 +250,14 @@ def recommend_movies(emotion): # ⭐️ 함수 이름 변경
         return [{"text": f"TMDb 오류: {type(e).__name__}: {e}", "poster": None, "overview": ""}]
 
 
-# --- 8) ⭐️ 세션 상태(Session State) 초기화 ---
+# --- 8) 통합 추천 ---
+def recommend(emotion):
+    return {
+        "음악": recommend_music(emotion),
+        "영화": recommend_movies(emotion),
+    }
+
+# --- 9) 상태/입력/실행 ---
 with st.expander("⚙️ 시스템 상태 확인"):
     with st.spinner("모델 로드 중..."):
         model, tokenizer, device, postmap = load_kobert_model()
@@ -254,13 +269,12 @@ if "final_emotion" not in st.session_state:
     st.session_state.final_emotion = None
 if "confidence" not in st.session_state:
     st.session_state.confidence = 0.0
-# ⭐️ 추천 목록을 세션에 저장 (버튼 복구)
 if "music_recs" not in st.session_state:
     st.session_state.music_recs = []
 if "movie_recs" not in st.session_state:
     st.session_state.movie_recs = []
 
-# --- 9) ⭐️ 버튼 콜백(Callback) 함수 정의 ---
+# --- 10) 버튼 콜백(Callback) 함수 정의 ---
 def handle_analyze_click():
     txt = st.session_state.diary_text
     if not txt.strip():
@@ -274,12 +288,10 @@ def handle_analyze_click():
         st.session_state.final_emotion = emo
         st.session_state.confidence = sc
         
-        # ⭐️ 분석과 동시에 "첫" 추천 목록을 생성
         with st.spinner("추천을 불러오는 중..."):
             st.session_state.music_recs = recommend_music(emo)
             st.session_state.movie_recs = recommend_movies(emo)
 
-# ⭐️ "다른 추천" 버튼을 위한 콜백 함수 (버튼 복구)
 def refresh_music():
     if st.session_state.final_emotion:
         with st.spinner("새로운 음악을 찾고 있어요..."):
@@ -290,12 +302,12 @@ def refresh_movies():
         with st.spinner("새로운 영화를 찾고 있어요..."):
             st.session_state.movie_recs = recommend_movies(st.session_state.final_emotion)
 
-# --- 10) ⭐️ 입력 UI (콜백 연결) ---
+# --- 11) 입력 UI (콜백 연결) ---
 st.text_area("오늘의 일기를 작성해주세요:", key="diary_text", height=230)
 
 st.button("🔍 내 하루 감정 분석하기", type="primary", on_click=handle_analyze_click)
 
-# --- 11) ⭐️ 결과/추천 출력 (버튼 복구) ---
+# --- 12) 결과/추천 출력 (UI 레이아웃 최종 수정) ---
 if st.session_state.final_emotion:
     emo = st.session_state.final_emotion
     sc = st.session_state.confidence
@@ -306,19 +318,16 @@ if st.session_state.final_emotion:
     st.divider()
     st.subheader(f"'{emo}' 감정을 위한 오늘의 Moodiary 추천")
 
-    # ⭐️ 추천 목록을 세션에서 직접 가져옴 (스피너 필요 없음)
     music_items = st.session_state.music_recs
     movie_items = st.session_state.movie_recs
 
-    # (UI 정렬 로직)
     for i in range(3):
         col_music, col_movie = st.columns(2)
 
-        # --- 음악 컬럼 (재생 버튼 + ⭐️다른 추천 버튼) ---
+        # --- 음악 컬럼 (재생 버튼 + 다른 추천 버튼) ---
         with col_music:
             if i == 0: 
                 st.markdown("#### 🎵 이런 음악도 들어보세요?")
-                # ⭐️ "다른 음악 추천" 버튼 복구
                 st.button("🔄 다른 음악 추천", on_click=refresh_music, use_container_width=True)
             
             if i < len(music_items):
@@ -333,11 +342,10 @@ if st.session_state.final_emotion:
                 else:
                     st.write(f"- {it}")
             
-        # --- 영화 컬럼 (정렬 맞춤 + ⭐️다른 추천 버튼) ---
+        # --- 영화 컬럼 (정렬 맞춤 + 다른 추천 버튼) ---
         with col_movie:
             if i == 0: 
                 st.markdown("#### 🎬 이런 영화도 추천해요?")
-                # ⭐️ "다른 영화 추천" 버튼 복구
                 st.button("🔄 다른 영화 추천", on_click=refresh_movies, use_container_width=True)
                 
             if i < len(movie_items):
