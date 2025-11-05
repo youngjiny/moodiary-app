@@ -99,8 +99,6 @@ def get_spotify_client():
         return None 
 
 # --- 6. 추천 함수 (Spotify 오류 수정, TMDB 랜덤 추천) ---
-
-# ⭐️ "AI 자동 추천" (검색) 함수 로직 수정
 def get_spotify_ai_recommendations(emotion):
     sp_client = get_spotify_client()
     if not sp_client: return ["Spotify 연결 실패 (클라이언트 초기화 실패)"]
@@ -118,41 +116,34 @@ def get_spotify_ai_recommendations(emotion):
         playlists = results.get('playlists', {}).get('items')
         if not playlists: return [f"'{query}' 관련 플레이리스트를 찾지 못했어요."]
         
-        # ⭐️⭐️⭐️ Spotify 오류 수정 (1) ⭐️⭐️⭐️
-        # 3번까지 재시도해서 유효한 트랙을 찾습니다.
-        for _ in range(3): # 최대 3번 시도
+        for _ in range(3): 
             random_playlist = random.choice(playlists)
             playlist_id = random_playlist['id']
             tracks_results = sp_client.playlist_items(playlist_id, limit=50)
             
             if not tracks_results or 'items' not in tracks_results:
-                continue # (NoneType 오류 방지) 다음 플레이리스트로 넘어감
+                continue 
 
             tracks = []
             for item in tracks_results['items']:
-                 # ⭐️⭐️⭐️ Spotify 오류 수정 (2) ⭐️⭐️⭐️
-                 # 'track'가 None이 아니고, 'track'안에 'artists'와 'name'이 있는지 확인
                  if item and item.get('track') and item['track'].get('artists') and item['track'].get('name'):
-                     # 아티스트 목록이 비어있지 않은지 확인
                      if item['track']['artists'] and item['track']['artists'][0].get('name'):
                          tracks.append(item['track'])
             
-            if tracks: # 유효한 트랙을 찾았으면
+            if tracks: 
                 random_tracks = random.sample(tracks, min(3, len(tracks)))
                 return [f"{track['name']} - {track['artists'][0]['name']}" for track in random_tracks]
 
-        # 3번 시도해도 못 찾으면
         return ["추천할 만한 노래를 찾지 못했습니다. (플레이리스트 문제)"]
 
     except Exception as e: 
         return [f"Spotify AI 검색 오류: {e}"]
 
-# ⭐️ TMDB 추천 로직을 "랜덤"으로 변경
 def get_tmdb_recommendations(emotion):
     tmdb_creds = st.secrets.get("tmdb", {})
     current_tmdb_key = tmdb_creds.get("api_key", "")
     if not current_tmdb_key:
-        return ["TMDB 연결에 실패했습니다. API 키를 확인해주세요."]
+        return [{"text": "TMDB 연결에 실패했습니다. API 키를 확인해주세요.", "poster": None}]
 
     TMDB_GENRE_MAP = {
         "행복": "35|10749|10751|10402|16",
@@ -163,7 +154,7 @@ def get_tmdb_recommendations(emotion):
     }
     genre_ids_string = TMDB_GENRE_MAP.get(emotion)
     if not genre_ids_string:
-        return [f"[{emotion}]에 대한 장르 맵핑이 없습니다."]
+        return [{"text": f"[{emotion}]에 대한 장르 맵핑이 없습니다.", "poster": None}]
 
     endpoint = "https://api.themoviedb.org/3/discover/movie"
     params = {
@@ -180,7 +171,7 @@ def get_tmdb_recommendations(emotion):
         data = response.json()
 
         if not data.get('results'):
-            return [f"[{emotion} 장르]의 인기 영화를 찾지 못했습니다."]
+            return [{"text": f"[{emotion} 장르]의 인기 영화를 찾지 못했습니다.", "poster": None}]
 
         popular_movies = data['results']
         selected_movies = popular_movies if len(popular_movies) <= 3 else random.sample(popular_movies, 3)
@@ -191,7 +182,6 @@ def get_tmdb_recommendations(emotion):
             year = (m.get('release_date') or '')[:4] or "N/A"
             rating = m.get('vote_average', 0.0)
             poster = f"https://image.tmdb.org/t/p/w500{m['poster_path']}" if m.get('poster_path') else None
-            # 기존 표시 문자열을 그대로 유지하면서 포스터만 추가
             recs.append({
                 "text": f"{title} ({year}) (평점: {rating:.1f})",
                 "poster": poster
@@ -199,7 +189,12 @@ def get_tmdb_recommendations(emotion):
         return recs
 
     except requests.exceptions.RequestException as e:
-        return [f"TMDb API 호출 실패: {e}"]
+        return [{"text": f"TMDb API 호출 실패: {e}", "poster": None}]
+
+def recommend(final_emotion):
+    music_recs = get_spotify_ai_recommendations(final_emotion)
+    movie_recs = get_tmdb_recommendations(final_emotion)
+    return {'음악': music_recs, '영화': movie_recs}
 
 # --- 7. Streamlit UI 구성 (최종 클린 버전) ---
 st.set_page_config(layout="wide")
@@ -257,16 +252,20 @@ if st.session_state.final_emotion:
             for item in recs['음악']: st.write(f"- {item}")
         else: st.write("- 추천을 찾지 못했어요.")
         
+    # ⭐️⭐️⭐️ 여기가 수정된 부분입니다 ⭐️⭐️⭐️
+    # (들여쓰기를 `with rec_col1`과 동일하게 맞췄습니다)
     with rec_col2:
-    st.markdown("#### 🎬 이런 영화도 추천해요?")
-    if recs['영화']:
-        for item in recs['영화']:
-            if isinstance(item, dict):
-                if item.get("poster"):
-                    st.image(item["poster"], width=160)
-                st.write(f"- {item.get('text','')}")
-            else:
-                # 과거 문자열 반환 대비
-                st.write(f"- {item}")
-    else:
-        st.write("- 추천을 찾지 못했어요.")
+        st.markdown("#### 🎬 이런 영화도 추천해요?")
+        if recs['영화']:
+            for item in recs['영화']:
+                if isinstance(item, dict):
+                    # 포스터가 있으면 이미지를 먼저 보여줍니다.
+                    if item.get("poster"):
+                        st.image(item["poster"], width=160)
+                    # 텍스트를 나중에 보여줍니다.
+                    st.write(f"- {item.get('text','')}")
+                else:
+                    # (혹시라도 딕셔너리가 아닌 텍스트가 반환될 경우 대비)
+                    st.write(f"- {item}")
+        else:
+            st.write("- 추천을 찾지 못했어요.")
