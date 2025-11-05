@@ -20,6 +20,10 @@ KOBERT_BASE_MODEL = "monologg/kobert"
 KOBERT_SAVED_REPO = "Young-jin/kobert-moodiary-app" # 학습 가중치(HF)
 TMDB_BASE_URL = "https://api.themoviedb.org/3"
 
+# ⭐️⭐️⭐️ "Secrets" 우회: TMDB API 키를 코드에 직접 하드코딩 ⭐️⭐️⭐️
+HARDCODED_TMDB_KEY = "8587d6734fd278ecc05dcbe710c29f9c"
+# ⭐️⭐️⭐️ (이것이 "TMDB 연결 실패"를 해결할 것입니다) ⭐️⭐️⭐️
+
 st.set_page_config(layout="wide")
 st.title("MOODIARY 💖")
 
@@ -90,7 +94,8 @@ def analyze_diary_kobert(text, model, tokenizer, device, post_processing_map):
 def get_spotify_client():
     if spotipy is None or SpotifyClientCredentials is None:
         return None
-    creds = st.secrets.get("spotify", {})
+    # ⭐️ Spotify는 Secrets가 잘 작동하므로 그대로 둡니다.
+    creds = st.secrets.get("spotify", {}) 
     cid = creds.get("client_id")
     secret = creds.get("client_secret")
     if not cid or not secret:
@@ -182,16 +187,14 @@ def recommend_music(emotion):
         return [f"Spotify AI 검색 오류: {type(last_exception).__name__}: {last_exception}"]
 
 
-# --- 7) TMDB 추천 (호환성 + 평점 7.5 이상) ---
+# --- 7) ⭐️ TMDB 추천 (키 "하드코딩") ---
 def recommend_movies(emotion):
     
-    # ⭐️ "똑똑한" 키 로딩
-    key = st.secrets.get("tmdb", {}).get("api_key", "")
-    if not key:
-        key = st.secrets.get("TMDB_API_KEY", "")
+    # ⭐️ "Secrets" 대신 "하드코딩된" 변수(HARDCODED_TMDB_KEY)를 사용합니다.
+    key = HARDCODED_TMDB_KEY
         
     if not key:
-        return [{"text": "TMDB 연결에 실패했습니다. (Secrets에서 키를 찾지 못함)", "poster": None, "overview": ""}]
+        return [{"text": "TMDB 키가 코드에 하드코딩되지 않았습니다.", "poster": None, "overview": ""}]
 
     # ⭐️ 고객님 요청 장르 (행복+호러 등)
     GENRES = {
@@ -255,46 +258,24 @@ def recommend(emotion):
         "영화": recommend_movies(emotion),
     }
 
-# --- 9) ⭐️ 상태/입력/실행 (디버깅 코드 추가) ---
+# --- 9) ⭐️ 상태/입력/실행 (디버깅 코드 제거) ---
 with st.expander("⚙️ 시스템 상태 확인"):
     with st.spinner("모델 로드 중..."):
         model, tokenizer, device, postmap = load_kobert_model()
     st.write("✅ 모델 로드 완료" if model else "❌ 모델 로드 실패")
     
-    # ⭐️⭐️⭐️ "Secrets" 디버깅 ⭐️⭐️⭐️
-    st.subheader("🕵️ Secrets 디버그 정보")
-    try:
-        # Streamlit이 현재 인식하고 있는 모든 'Secrets' 키를 나열합니다.
-        all_keys = st.secrets.keys()
-        st.write("Streamlit이 인식한 Secrets 키 목록:")
-        st.write(list(all_keys))
+    # ⭐️ 디버깅 코드를 제거하고, Secrets가 아닌 하드코딩된 키를 사용하므로
+    # ⭐️ TMDB 확인 로직도 하드코딩된 키를 확인합니다.
+    if st.secrets.get("spotify", {}).get("client_id"): 
+        st.success("✅ Spotify 인증 정보 (Secrets)를 찾았습니다.")
+    else: 
+        st.error("❌ Spotify 인증 정보 (Secrets)를 찾지 못했습니다.")
 
-        # 1. [spotify] 섹션 확인
-        if "spotify" in all_keys:
-            st.success("✅ [spotify] 섹션을 찾았습니다.")
-            spotify_creds = st.secrets.get("spotify", {})
-            st.write(f"   - client_id: {'찾음' if spotify_creds.get('client_id') else '못 찾음'}")
-            st.write(f"   - client_secret: {'찾음' if spotify_creds.get('client_secret') else '못 찾음'}")
-        else:
-            st.error("❌ [spotify] 섹션을 찾지 못했습니다.")
+    if HARDCODED_TMDB_KEY:
+        st.success("✅ TMDB API 키 (하드코딩)가 존재합니다.")
+    else:
+        st.error("❌ TMDB API 키 (하드코딩)가 비어있습니다.")
 
-        # 2. [tmdb] 섹션 확인 (새 방식)
-        if "tmdb" in all_keys:
-            st.success("✅ [tmdb] 섹션을 찾았습니다.")
-            tmdb_creds = st.secrets.get("tmdb", {})
-            st.write(f"   - api_key: {'찾음' if tmdb_creds.get('api_key') else '못 찾음'}")
-        else:
-            st.error("❌ [tmdb] 섹션을 찾지 못했습니다.")
-
-        # 3. TMDB_API_KEY 확인 (옛 방식)
-        if "TMDB_API_KEY" in all_keys:
-            st.success("✅ TMDB_API_KEY (단일)를 찾았습니다.")
-        else:
-            st.error("❌ TMDB_API_KEY (단일)를 찾지 못했습니다.")
-            
-    except Exception as e:
-        st.error(f"Secrets를 읽는 중 오류 발생: {e}")
-    # ⭐️⭐️⭐️ 디버깅 끝 ⭐️⭐️⭐️
 
 if "diary_text" not in st.session_state:
     st.session_state.diary_text = ""
