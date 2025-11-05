@@ -100,54 +100,104 @@ def get_spotify_client():
     except Exception:
         return None
 
-# --- 6) ⭐️ Spotify 추천 (로직 변경: 공식 차트 TOP 50) ---
+# --- 6) ⭐️ Spotify 추천 (404 오류 방지) ---
 def get_spotify_ai_recommendations(emotion):
     sp = get_spotify_client()
     if not sp:
         return ["Spotify 연결 실패 (Secrets 누락 또는 클라이언트 초기화 실패)"]
 
-    # ⭐️ "센스 있는" 추천을 위해, 감정 키워드 검색 대신 "공식 차트"를 사용합니다.
-    # (감정별로 다른 차트를 매핑할 수도 있습니다)
-    CHART_PLAYLISTS = {
-        "행복": "37i9dQZEVXbNxXF4UeQlye", # Top 50 - South Korea
-        "슬픔": "37i9dQZEVXbNxXF4UeQlye", # Top 50 - South Korea
-        "분노": "37i9dQZEVXbJxxNsEk86S4", # K-Pop ON!
-        "힘듦": "37i9dQZEVXbNxXF4UeQlye", # Top 50 - South Korea
-        "놀람": "37i9dQZEVXbJxxNsEk86S4", # K-Pop ON!
+    def is_korean(txt):
+        return isinstance(txt, str) and any('가' <= ch <= '힣' for ch in txt)
+
+    KR_KEYWORDS = {
+        "행복": ["케이팝 최신", "국내 신나는 노래", "여름 노래", "K-pop happy"],
+        "슬픔": ["발라드 최신", "이별 노래", "감성 케이팝", "K-ballad"],
+        "분노": ["운동 음악", "락", "파워 송", "K-rock"],
+        "힘듦": ["위로 노래", "힐링 케이팝", "잔잔한 팝"],
+        "놀람": ["파티 케이팝", "EDM 케이팝", "페스티벌 음악"],
     }
-    
-    # 해당 감정의 차트를 가져오되, 없으면 한국 Top 50을 기본값으로
-    playlist_id = CHART_PLAYLISTS.get(emotion, "37i9dQZEVXbNxXF4UeQlye")
+
+    query = random.choice(KR_KEYWORDS.get(emotion, ["케이팝 최신"])) + " year:2015-2025"
+    last_exception = None # 마지막 오류 저장용
 
     try:
-        # 1️⃣ 플레이리스트 트랙 가져오기 (50곡)
-        tracks_results = sp.playlist_items(playlist_id, limit=50, market="KR")
-        if not tracks_results or 'items' not in tracks_results:
-             return ["Spotify 차트를 불러오지 못했습니다."]
-
+        # 1️⃣ 트랙 직접 검색 (최신 & 한국어 필터)
+        res = sp.search(q=query, type="track", limit=50, market="KR")
+        tracks = (res.get("tracks") or {}).get("items") or []
         valid = []
-        for item in tracks_results['items']:
-            track = item.get('track')
-            if track and track.get('artists') and track.get('name'):
-                artists = track.get("artists") or []
+        for t in tracks:
+            name = t.get("name")
+            artists = t.get("artists") or []
+            artist = artists[0].get("name") if artists else "Unknown"
+            album = t.get("album") or {}
+            images = album.get("images") or []
+            cover = images[0]["url"] if images else None
+            year = (album.get("release_date") or "2005")[:4]
+
+            if int(year) >= 2015 and (is_korean(name) or is_korean(artist)):
+                valid.append({"title": name, "artist": artist, "cover": cover})
+
+        # 2️⃣ 만약 없으면 그냥 최신 케이팝 플레이리스트에서 가져오기
+        if not valid:
+            fallback = sp.search(q="K-pop Hits Korea 2020-2025", type="playlist", limit=10, market="KR")
+            pls = (fallback.get("playlists") or {}).get("items") or []
+            for pl in pls:
+                pid = pl.get("id")
+                if not pid: continue 
+                
+                # ⭐️⭐️⭐️ 404 오류 방지 수정 ⭐️⭐️⭐️
+                try:
+                    items = (sp.playlist_items(pid, limit=50, market="KR") or {}).get("items") or []
+                except spotipy.exceptions.SpotifyException as se:
+                    # 404 (Not Found) 오류가 발생하면, 이 플레이리스트를 건너뛰고 다음 것을 시도
+                    if se.http_status == 404:
+                        continue 
+                    else:
+                        last_exception = se # 다른 종류의 오류면 저장
+                        continue # 일단 다음 플레이리스트로
+                # ⭐️⭐️⭐️ 수정 끝 ⭐️⭐️⭐️
+
+                for it in items:
+                    tr = (it or {}).get("track") or {}
+                    if not tr:
+                        continue
+                    name = tr.get("name")
+                    artists = tr.get("artists") or []
+                    artist = artists[0].get("name") if artists else "Unknown"
+                    album = tr.get("album") or {}
+                    images = album.get("images") or []
+                    cover = images[0]["url"] if images else None
+                    if name:
+                        valid.append({"title": name, "artist": artist, "cover": cover})
+                if valid:
+                    break 
+
+        # 3️⃣ 그래도 없으면 전세계 최신 TOP 트랙 fallback
+        if not valid:
+            top = sp.search(q="top hits 2024", type="track", limit=50, market="KR")
+            titems = (top.get("tracks") or {}).get("items") or []
+            for t in titems:
+                name = t.get("name")
+                artists = t.get("artists") or []
                 artist = artists[0].get("name") if artists else "Unknown"
-                album = track.get("album") or {}
+                album = t.get("album") or {}
                 images = album.get("images") or []
                 cover = images[0]["url"] if images else None
-                if track['artists'] and track['artists'][0].get('name'):
-                    valid.append({"title": track['name'], "artist": artist, "cover": cover})
-        
-        # 2️⃣ 유효한 트랙이 없으면 (거의 불가능하지만)
+                if name:
+                    valid.append({"title": name, "artist": artist, "cover": cover})
+
         if not valid:
-            return ["추천할 만한 노래를 찾지 못했습니다. (차트 로딩 문제)"]
+            return [{"title": "추천 없음", "artist": "Spotify API 문제", "cover": None}]
         
-        # 3️⃣ 50곡 중 3곡을 랜덤으로 뽑아 반환
         return random.sample(valid, k=min(3, len(valid)))
 
     except Exception as e:
-        return [f"Spotify 추천 오류: {type(e).__name__}: {e}"]
+        last_exception = e
+        return [f"Spotify AI 검색 오류: {type(last_exception).__name__}: {last_exception}"]
 
-# --- 7) ⭐️ TMDB 추천 (줄거리 추가) ---
+
+
+# --- 7) TMDB 추천 (포스터 + 줄거리 포함) ---
 def get_tmdb_recommendations(emotion):
     key = st.secrets.get("tmdb", {}).get("api_key", "")
     if not key:
@@ -168,8 +218,12 @@ def get_tmdb_recommendations(emotion):
         r = requests.get(
             f"{TMDB_BASE_URL}/discover/movie",
             params={
-                "api_key": key, "language": "ko-KR", "sort_by": "popularity.desc",
-                "with_genres": g, "page": 1, "vote_count.gte": 100,
+                "api_key": key,
+                "language": "ko-KR",
+                "sort_by": "popularity.desc",
+                "with_genres": g,
+                "page": 1,
+                "vote_count.gte": 100,
             },
             timeout=10,
         )
@@ -186,8 +240,6 @@ def get_tmdb_recommendations(emotion):
             year = (m.get("release_date") or "")[:4] or "N/A"
             rating = m.get("vote_average", 0.0)
             poster = f"https://image.tmdb.org/t/p/w500{m['poster_path']}" if m.get("poster_path") else None
-            
-            # ⭐️⭐️⭐️ 2. 영화 줄거리 추가 (요청사항 반영) ⭐️⭐️⭐️
             overview = m.get("overview", "줄거리 정보가 없습니다.")
             if not overview: 
                 overview = "줄거리 정보가 없습니다."
@@ -198,7 +250,7 @@ def get_tmdb_recommendations(emotion):
                 "title": title,
                 "year": year,
                 "rating": rating,
-                "overview": overview # ⭐️ 줄거리 정보 추가
+                "overview": overview 
             })
         return out
     except Exception as e:
@@ -241,7 +293,7 @@ def handle_analyze_click():
 
 st.button("🔍 내 하루 감정 분석하기", type="primary", on_click=handle_analyze_click)
 
-# --- 10) ⭐️ 결과/추천 출력 (UI 수정) ---
+# --- 10) 결과/추천 출력 (정렬 + 이미지) ---
 if st.session_state.final_emotion:
     emo = st.session_state.final_emotion
     sc = st.session_state.confidence
@@ -257,7 +309,7 @@ if st.session_state.final_emotion:
 
     col_music, col_movie = st.columns(2)
 
-    # ⭐️ 음악 (표지 크기 + 글씨 크기 수정)
+    # 음악 (앨범 커버 + 텍스트)
     with col_music:
         st.markdown("#### 🎵 이런 음악도 들어보세요?")
         items = recs.get("음악", [])
@@ -267,13 +319,11 @@ if st.session_state.final_emotion:
                     img_c, txt_c = st.columns([1, 4])
                     cover = it.get("cover")
                     if cover:
-                        # ⭐️⭐️⭐️ 1. 음악 표지 크기 키우기 (80 -> 160) ⭐️⭐️⭐️
                         img_c.image(cover, width=160) 
                     else:
                         img_c.empty()
                     title = it.get("title", "제목없음")
                     artist = it.get("artist", "Unknown")
-                    # ⭐️⭐️⭐️ 3. 글씨 크기 키우기 (H5 마크다운) ⭐️⭐️⭐️
                     txt_c.markdown(f"##### **{title}**\n{artist}")
                     st.markdown("---")
                 else:
@@ -281,7 +331,7 @@ if st.session_state.final_emotion:
         else:
             st.write("- 추천을 찾지 못했어요.")
 
-    # ⭐️ 영화 (줄거리 추가 + 글씨 크기 수정)
+    # 영화 (포스터 + 텍스트)
     with col_movie:
         st.markdown("#### 🎬 이런 영화도 추천해요?")
         items = recs.get("영화", [])
@@ -291,21 +341,18 @@ if st.session_state.final_emotion:
                     img_c, txt_c = st.columns([1, 4])
                     poster = it.get("poster")
                     if poster:
-                        img_c.image(poster, width=160) # (크기는 이미 160)
+                        img_c.image(poster, width=160)
                     else:
                         img_c.empty()
                     
-                    # ⭐️⭐️⭐️ 2 & 3. 줄거리 길게 + 글씨 크게 ⭐️⭐️⭐️
                     title = it.get("title", "제목없음")
                     year = it.get("year", "N/A")
                     rating = float(it.get("rating", 0.0))
                     overview = it.get("overview", "")
                     
-                    # 줄거리 150자로 자르기 (요청사항 반영)
                     if len(overview) > 150:
                         overview = overview[:150] + "..."
                     
-                    # 텍스트 조합 (H5 마크다운 + 줄거리)
                     line = f"##### **{title} ({year})**\n⭐ {rating:.1f}\n\n*{overview}*"
                     
                     txt_c.markdown(line)
