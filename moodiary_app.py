@@ -9,6 +9,7 @@ from spotipy.oauth2 import SpotifyClientCredentials
 import requests
 import torch
 from transformers import AutoModelForSequenceClassification, AutoTokenizer, AutoConfig
+import time # ⭐️ "자동 재시도"를 위한 time 라이브러리 임포트
 
 # --- 2. 기본 설정 및 경로 ---
 KOBERT_BASE_MODEL = "monologg/kobert"
@@ -98,7 +99,7 @@ def get_spotify_client():
     except Exception as e:
         return None 
 
-# --- 6. 추천 함수 (Spotify 오류 수정, TMDB 랜덤 추천) ---
+# --- 6. 추천 함수 (Spotify "자동 재시도" 기능 추가) ---
 
 # ⭐️ "AI 자동 추천" (검색) 함수 로직 수정
 def get_spotify_ai_recommendations(emotion):
@@ -112,42 +113,54 @@ def get_spotify_ai_recommendations(emotion):
         "놀람": ["K-Pop Party", "신나는"], 
     }
     query = random.choice(emotion_keywords.get(emotion, ["K-Pop"]))
-    try:
-        results = sp_client.search(q=query, type='playlist', limit=20, market="KR")
-        if not results: return [f"'{query}'에 대한 검색 결과가 없습니다."]
-        playlists = results.get('playlists', {}).get('items')
-        if not playlists: return [f"'{query}' 관련 플레이리스트를 찾지 못했어요."]
-        
-        for _ in range(3): 
-            random_playlist = random.choice(playlists)
-            playlist_id = random_playlist['id']
-            tracks_results = sp_client.playlist_items(playlist_id, limit=50)
+    
+    # ⭐️⭐️⭐️ "자동 재시도" 로직 시작 ⭐️⭐️⭐️
+    attempts = 0
+    max_attempts = 3
+    last_exception = None
+
+    while attempts < max_attempts:
+        try:
+            # --- (시작) 원래 로직 ---
+            results = sp_client.search(q=query, type='playlist', limit=20, market="KR")
+            if not results: return [f"'{query}'에 대한 검색 결과가 없습니다."]
+            playlists = results.get('playlists', {}).get('items')
+            if not playlists: return [f"'{query}' 관련 플레이리스트를 찾지 못했어요."]
             
-            if not tracks_results or 'items' not in tracks_results:
-                continue 
+            for _ in range(3): 
+                random_playlist = random.choice(playlists)
+                playlist_id = random_playlist['id']
+                tracks_results = sp_client.playlist_items(playlist_id, limit=50)
+                
+                if not tracks_results or 'items' not in tracks_results:
+                    continue 
 
-            tracks = []
-            for item in tracks_results['items']:
-                 # ⭐️⭐️⭐️ Spotify "NoneType" 오류 최종 수정 ⭐️⭐️⭐️
-                 # 1. 'track' 객체를 먼저 안전하게 가져옵니다.
-                 track = item.get('track')
-                 
-                 # 2. track이 None이 아닌지, 그리고 그 안에 artists와 name이 있는지 확인합니다.
-                 if track and track.get('artists') and track.get('name'):
-                     # 3. artists 리스트가 비어있지 않고, 첫 번째 artist에 name이 있는지 확인합니다.
-                     if track['artists'] and track['artists'][0].get('name'):
-                         tracks.append(track) # 4. 모든 검사를 통과한 track만 추가합니다.
+                tracks = []
+                for item in tracks_results['items']:
+                     track = item.get('track')
+                     if track and track.get('artists') and track.get('name'):
+                         if track['artists'] and track['artists'][0].get('name'):
+                             tracks.append(track) 
+                
+                if tracks: 
+                    random_tracks = random.sample(tracks, min(3, len(tracks)))
+                    return [f"{track['name']} - {track['artists'][0]['name']}" for track in random_tracks] # ⭐️ 성공!
+
+            return ["추천할 만한 노래를 찾지 못했습니다. (플레이리스트 문제)"]
+            # --- (끝) 원래 로직 ---
+
+        except Exception as e:
+            # ⭐️ 오류 발생 시 (ConnectionResetError 등)
+            attempts += 1
+            last_exception = e
+            time.sleep(0.5) # 0.5초 대기 후 재시도
             
-            if tracks: 
-                random_tracks = random.sample(tracks, min(3, len(tracks)))
-                return [f"{track['name']} - {track['artists'][0]['name']}" for track in random_tracks]
+    # ⭐️ 3번 모두 실패한 경우
+    return [f"Spotify AI 검색 최종 실패 (3회 재시도): {last_exception}"]
+    # ⭐️⭐️⭐️ "자동 재시도" 로직 끝 ⭐️⭐️⭐️
 
-        return ["추천할 만한 노래를 찾지 못했습니다. (플레이리스트 문제)"]
 
-    except Exception as e: 
-        return [f"Spotify AI 검색 오류: {e}"]
-
-# ⭐️ TMDB 추천 로직을 "랜덤"으로 변경
+# ⭐️ TMDB 추천 로직 (변경 없음)
 def get_tmdb_recommendations(emotion):
     tmdb_creds = st.secrets.get("tmdb", {})
     current_tmdb_key = tmdb_creds.get("api_key", "")
