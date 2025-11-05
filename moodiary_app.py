@@ -182,7 +182,7 @@ def get_spotify_ai_recommendations(emotion):
         return [f"Spotify AI 검색 오류: {type(last_exception).__name__}: {last_exception}"]
 
 
-# --- 7) ⭐️ TMDB 추천 (평점 7.5 이상) ---
+# --- 7) TMDB 추천 (포스터 + 줄거리 포함) ---
 def get_tmdb_recommendations(emotion):
     key = st.secrets.get("tmdb", {}).get("api_key", "")
     if not key:
@@ -209,7 +209,6 @@ def get_tmdb_recommendations(emotion):
                 "with_genres": g,
                 "page": 1,
                 "vote_count.gte": 100,
-                "vote_average.gte": 7.5 # ⭐️⭐️⭐️ 이 줄이 추가되었습니다! ⭐️⭐️⭐️
             },
             timeout=10,
         )
@@ -217,8 +216,7 @@ def get_tmdb_recommendations(emotion):
         results = r.json().get("results", [])
 
         if not results:
-            # ⭐️ 평점 7.5+ 영화가 없을 경우, 친절한 메시지 반환
-            return [{"text": f"[{emotion}] 감정의 평점 7.5 이상 인기 영화를 찾지 못했습니다.", "poster": None, "overview": ""}]
+            return [{"text": f"[{emotion}] 관련 영화를 찾지 못했습니다.", "poster": None, "overview": ""}]
 
         picks = results if len(results) <= 3 else random.sample(results, 3)
         out = []
@@ -279,7 +277,7 @@ def handle_analyze_click():
 
 st.button("🔍 내 하루 감정 분석하기", type="primary", on_click=handle_analyze_click)
 
-# --- 10) 결과/추천 출력 (UI 레이아웃 최종 수정) ---
+# --- 10) ⭐️ 결과/추천 출력 (UI 레이아웃 최종 수정) ---
 if st.session_state.final_emotion:
     emo = st.session_state.final_emotion
     sc = st.session_state.confidence
@@ -323,7 +321,10 @@ if st.session_state.final_emotion:
                 
             if i < len(movie_items):
                 it = movie_items[i]
-                if isinstance(it, dict):
+                
+                # ⭐️⭐️⭐️ 여기가 핵심 수정 ⭐️⭐️⭐️
+                # 'title' 키가 있는지 확인 (성공한 추천)
+                if isinstance(it, dict) and it.get("title"):
                     poster = it.get("poster")
                     if poster:
                         st.image(poster, width=160)
@@ -335,7 +336,14 @@ if st.session_state.final_emotion:
                     
                     line = f"##### **{title} ({year})**\n⭐ {rating:.1f}\n\n*{overview}*"
                     st.markdown(line)
+                
+                # 'title' 키가 없음 (실패한 추천, e.g., {"text": "API 오류..."})
+                elif isinstance(it, dict):
+                    st.error(it.get("text", "알 수 없는 영화 추천 오류"))
+                # ⭐️⭐️⭐️ 수정 끝 ⭐️⭐️⭐️
+
                 else:
-                    st.write(f"- {it}")
+                    # (dict가 아닌 문자열 오류)
+                    st.error(f"- {it}")
 
         st.markdown("---")
