@@ -5,6 +5,7 @@ import requests
 import torch
 from transformers import AutoModelForSequenceClassification, AutoTokenizer, AutoConfig
 import time 
+import streamlit.components.v1 as components # ⭐️ Spotify 재생 버튼에 필요
 
 # (선택) Spotify SDK
 try:
@@ -100,7 +101,7 @@ def get_spotify_client():
     except Exception:
         return None
 
-# --- 6) Spotify 추천 (키워드 검색 + 404 방어) ---
+# --- 6) ⭐️ Spotify 추천 (track_id 추가) ---
 def get_spotify_ai_recommendations(emotion):
     sp = get_spotify_client()
     if not sp:
@@ -125,14 +126,12 @@ def get_spotify_ai_recommendations(emotion):
         tracks = (res.get("tracks") or {}).get("items") or []
         valid = []
         for t in tracks:
+            track_id = t.get("id") # ⭐️ 1. 트랙 ID 가져오기
             name = t.get("name")
             artists = t.get("artists") or []
             artist = artists[0].get("name") if artists else "Unknown"
-            album = t.get("album") or {}
-            images = album.get("images") or []
-            cover = images[0]["url"] if images else None
-            if name and (is_korean(name) or is_korean(artist)):
-                valid.append({"title": name, "artist": artist, "cover": cover})
+            if track_id and name and (is_korean(name) or is_korean(artist)):
+                valid.append({"title": name, "artist": artist, "id": track_id}) # ⭐️ 2. ID 반환
 
         if not valid:
             fallback = sp.search(q="K-pop Hits Korea 2020-2025", type="playlist", limit=10, market="KR")
@@ -140,7 +139,6 @@ def get_spotify_ai_recommendations(emotion):
             for pl in pls:
                 pid = pl.get("id")
                 if not pid: continue 
-                
                 try:
                     items = (sp.playlist_items(pid, limit=50, market="KR") or {}).get("items") or []
                 except spotipy.exceptions.SpotifyException as se:
@@ -149,19 +147,16 @@ def get_spotify_ai_recommendations(emotion):
                     else:
                         last_exception = se 
                         continue 
-                
                 for it in items:
                     tr = (it or {}).get("track") or {}
                     if not tr:
                         continue
+                    track_id = tr.get("id") # ⭐️ 1. 트랙 ID 가져오기
                     name = tr.get("name")
                     artists = tr.get("artists") or []
                     artist = artists[0].get("name") if artists else "Unknown"
-                    album = tr.get("album") or {}
-                    images = album.get("images") or []
-                    cover = images[0]["url"] if images else None
-                    if name:
-                        valid.append({"title": name, "artist": artist, "cover": cover})
+                    if track_id and name:
+                        valid.append({"title": name, "artist": artist, "id": track_id}) # ⭐️ 2. ID 반환
                 if valid:
                     break 
 
@@ -169,24 +164,21 @@ def get_spotify_ai_recommendations(emotion):
             top = sp.search(q="top hits 2024", type="track", limit=50, market="KR")
             titems = (top.get("tracks") or {}).get("items") or []
             for t in titems:
+                track_id = t.get("id") # ⭐️ 1. 트랙 ID 가져오기
                 name = t.get("name")
                 artists = t.get("artists") or []
                 artist = artists[0].get("name") if artists else "Unknown"
-                album = t.get("album") or {}
-                images = album.get("images") or []
-                cover = images[0]["url"] if images else None
-                if name:
-                    valid.append({"title": name, "artist": artist, "cover": cover})
+                if track_id and name:
+                    valid.append({"title": name, "artist": artist, "id": track_id}) # ⭐️ 2. ID 반환
 
         if not valid:
-            return [{"title": "추천 없음", "artist": "Spotify API 문제", "cover": None}]
+            return [{"title": "추천 없음", "artist": "Spotify API 문제", "id": None}]
         
         return random.sample(valid, k=min(3, len(valid)))
 
     except Exception as e:
         last_exception = e
         return [f"Spotify AI 검색 오류: {type(last_exception).__name__}: {last_exception}"]
-
 
 # --- 7) TMDB 추천 (포스터 + 줄거리 포함) ---
 def get_tmdb_recommendations(emotion):
@@ -305,48 +297,46 @@ if st.session_state.final_emotion:
     for i in range(3):
         col_music, col_movie = st.columns(2)
 
-        # --- 음악 컬럼 ---
+        # --- 음악 컬럼 (⭐️ 재생 버튼으로 변경) ---
         with col_music:
-            if i == 0: # 첫 번째 항목에만 제목 표시
+            if i == 0: 
                 st.markdown("#### 🎵 이런 음악도 들어보세요?")
             
-            if i < len(music_items): # i번째 음악이 있는지 확인
+            if i < len(music_items):
                 it = music_items[i]
                 if isinstance(it, dict):
-                    cover = it.get("cover")
-                    if cover:
-                        st.image(cover, width=160) # 표지 크기 통일
-                    
-                    title = it.get("title", "제목없음")
-                    artist = it.get("artist", "Unknown")
-                    st.markdown(f"##### **{title}**\n{artist}")
+                    track_id = it.get("id")
+                    if track_id:
+                        # ⭐️ Spotify 임베드 플레이어 사용 (높이 152px)
+                        embed_url = f"https://open.spotify.com/embed/track/{track_id}?utm_source=generator&theme=0"
+                        components.iframe(embed_url, height=152)
+                    else:
+                        # (ID가 없는 경우 - 오류 메시지 등)
+                        st.write(f"- {it.get('title', '오류')}")
                 else:
-                    st.write(f"- {it}") # 오류 메시지 등
+                    st.write(f"- {it}")
             
-            st.markdown("---") # ⭐️ 실선은 항상 그림
-
-        # --- 영화 컬럼 ---
+        # --- 영화 컬럼 (⭐️ 정렬 맞춤) ---
         with col_movie:
-            if i == 0: # 첫 번째 항목에만 제목 표시
+            if i == 0: 
                 st.markdown("#### 🎬 이런 영화도 추천해요?")
                 
-            if i < len(movie_items): # i번째 영화가 있는지 확인
+            if i < len(movie_items):
                 it = movie_items[i]
                 if isinstance(it, dict):
                     poster = it.get("poster")
                     if poster:
-                        st.image(poster, width=160) # 표지 크기 통일
+                        st.image(poster, width=160)
                     
                     title = it.get("title", "제목없음")
                     year = it.get("year", "N/A")
                     rating = float(it.get("rating", 0.0))
-                    
-                    # ⭐️ 줄거리 (잘리지 않음)
                     overview = it.get("overview", "") 
                     
                     line = f"##### **{title} ({year})**\n⭐ {rating:.1f}\n\n*{overview}*"
                     st.markdown(line)
                 else:
-                    st.write(f"- {it}") # 오류 메시지 등
+                    st.write(f"- {it}")
 
-            st.markdown("---") # ⭐️ 실선은 항상 그림
+        # ⭐️⭐️⭐️ "실선"을 컬럼 밖, 루프 안에 둬서 라인을 맞춤 ⭐️⭐️⭐️
+        st.markdown("---")
