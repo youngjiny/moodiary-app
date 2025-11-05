@@ -99,6 +99,8 @@ def get_spotify_client():
         return None 
 
 # --- 6. 추천 함수 (Spotify 오류 수정, TMDB 랜덤 추천) ---
+
+# ⭐️ "AI 자동 추천" (검색) 함수 로직 수정
 def get_spotify_ai_recommendations(emotion):
     sp_client = get_spotify_client()
     if not sp_client: return ["Spotify 연결 실패 (클라이언트 초기화 실패)"]
@@ -126,9 +128,15 @@ def get_spotify_ai_recommendations(emotion):
 
             tracks = []
             for item in tracks_results['items']:
-                 if item and item.get('track') and item['track'].get('artists') and item['track'].get('name'):
-                     if item['track']['artists'] and item['track']['artists'][0].get('name'):
-                         tracks.append(item['track'])
+                 # ⭐️⭐️⭐️ Spotify "NoneType" 오류 최종 수정 ⭐️⭐️⭐️
+                 # 1. 'track' 객체를 먼저 안전하게 가져옵니다.
+                 track = item.get('track')
+                 
+                 # 2. track이 None이 아닌지, 그리고 그 안에 artists와 name이 있는지 확인합니다.
+                 if track and track.get('artists') and track.get('name'):
+                     # 3. artists 리스트가 비어있지 않고, 첫 번째 artist에 name이 있는지 확인합니다.
+                     if track['artists'] and track['artists'][0].get('name'):
+                         tracks.append(track) # 4. 모든 검사를 통과한 track만 추가합니다.
             
             if tracks: 
                 random_tracks = random.sample(tracks, min(3, len(tracks)))
@@ -139,6 +147,7 @@ def get_spotify_ai_recommendations(emotion):
     except Exception as e: 
         return [f"Spotify AI 검색 오류: {e}"]
 
+# ⭐️ TMDB 추천 로직을 "랜덤"으로 변경
 def get_tmdb_recommendations(emotion):
     tmdb_creds = st.secrets.get("tmdb", {})
     current_tmdb_key = tmdb_creds.get("api_key", "")
@@ -252,20 +261,15 @@ if st.session_state.final_emotion:
             for item in recs['음악']: st.write(f"- {item}")
         else: st.write("- 추천을 찾지 못했어요.")
         
-    # ⭐️⭐️⭐️ 여기가 수정된 부분입니다 ⭐️⭐️⭐️
-    # (들여쓰기를 `with rec_col1`과 동일하게 맞췄습니다)
     with rec_col2:
         st.markdown("#### 🎬 이런 영화도 추천해요?")
         if recs['영화']:
             for item in recs['영화']:
                 if isinstance(item, dict):
-                    # 포스터가 있으면 이미지를 먼저 보여줍니다.
                     if item.get("poster"):
                         st.image(item["poster"], width=160)
-                    # 텍스트를 나중에 보여줍니다.
                     st.write(f"- {item.get('text','')}")
                 else:
-                    # (혹시라도 딕셔너리가 아닌 텍스트가 반환될 경우 대비)
                     st.write(f"- {item}")
         else:
             st.write("- 추천을 찾지 못했어요.")
