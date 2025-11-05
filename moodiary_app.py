@@ -182,17 +182,13 @@ def recommend_music(emotion):
         return [f"Spotify AI 검색 오류: {type(last_exception).__name__}: {last_exception}"]
 
 
-# --- 7) ⭐️ TMDB 추천 (호환성 + 평점 7.5 이상) ---
+# --- 7) TMDB 추천 (호환성 + 평점 7.5 이상) ---
 def recommend_movies(emotion):
     
-    # ⭐️⭐️⭐️ "똑똑한" 키 로딩 ⭐️⭐️⭐️
-    # 1. [tmdb] 섹션을 먼저 시도
+    # ⭐️ "똑똑한" 키 로딩
     key = st.secrets.get("tmdb", {}).get("api_key", "")
-    
-    # 2. 만약 [tmdb] 섹션에 키가 없으면, 예전 방식(단일 변수)을 시도
     if not key:
         key = st.secrets.get("TMDB_API_KEY", "")
-    # ⭐️⭐️⭐️ 수정 끝 ⭐️⭐️⭐️
         
     if not key:
         return [{"text": "TMDB 연결에 실패했습니다. (Secrets에서 키를 찾지 못함)", "poster": None, "overview": ""}]
@@ -259,11 +255,46 @@ def recommend(emotion):
         "영화": recommend_movies(emotion),
     }
 
-# --- 9) 상태/입력/실행 ---
+# --- 9) ⭐️ 상태/입력/실행 (디버깅 코드 추가) ---
 with st.expander("⚙️ 시스템 상태 확인"):
     with st.spinner("모델 로드 중..."):
         model, tokenizer, device, postmap = load_kobert_model()
     st.write("✅ 모델 로드 완료" if model else "❌ 모델 로드 실패")
+    
+    # ⭐️⭐️⭐️ "Secrets" 디버깅 ⭐️⭐️⭐️
+    st.subheader("🕵️ Secrets 디버그 정보")
+    try:
+        # Streamlit이 현재 인식하고 있는 모든 'Secrets' 키를 나열합니다.
+        all_keys = st.secrets.keys()
+        st.write("Streamlit이 인식한 Secrets 키 목록:")
+        st.write(list(all_keys))
+
+        # 1. [spotify] 섹션 확인
+        if "spotify" in all_keys:
+            st.success("✅ [spotify] 섹션을 찾았습니다.")
+            spotify_creds = st.secrets.get("spotify", {})
+            st.write(f"   - client_id: {'찾음' if spotify_creds.get('client_id') else '못 찾음'}")
+            st.write(f"   - client_secret: {'찾음' if spotify_creds.get('client_secret') else '못 찾음'}")
+        else:
+            st.error("❌ [spotify] 섹션을 찾지 못했습니다.")
+
+        # 2. [tmdb] 섹션 확인 (새 방식)
+        if "tmdb" in all_keys:
+            st.success("✅ [tmdb] 섹션을 찾았습니다.")
+            tmdb_creds = st.secrets.get("tmdb", {})
+            st.write(f"   - api_key: {'찾음' if tmdb_creds.get('api_key') else '못 찾음'}")
+        else:
+            st.error("❌ [tmdb] 섹션을 찾지 못했습니다.")
+
+        # 3. TMDB_API_KEY 확인 (옛 방식)
+        if "TMDB_API_KEY" in all_keys:
+            st.success("✅ TMDB_API_KEY (단일)를 찾았습니다.")
+        else:
+            st.error("❌ TMDB_API_KEY (단일)를 찾지 못했습니다.")
+            
+    except Exception as e:
+        st.error(f"Secrets를 읽는 중 오류 발생: {e}")
+    # ⭐️⭐️⭐️ 디버깅 끝 ⭐️⭐️⭐️
 
 if "diary_text" not in st.session_state:
     st.session_state.diary_text = ""
