@@ -21,7 +21,7 @@ try:
     font_name = font_manager.FontProperties(fname=font_path).get_name()
     plt.rc('font', family=font_name)
 except FileNotFoundError:
-    pass # ⭐️ 경고 메시지를 띄우지 않고 그냥 넘어갑니다.
+    pass 
 
 FINAL_EMOTIONS = ["행복", "슬픔", "분노", "힘듦", "놀람"]
 
@@ -54,14 +54,12 @@ def load_kobert_model():
         model.to(device)
         post_processing_map = getattr(model.config, 'post_processing_map', None)
         if post_processing_map is None:
-            # ⭐️ 하드코딩 경고 메시지도 숨깁니다.
             post_processing_map = {
                 '기쁨': '행복', '슬픔': '슬픔', '상처': '슬픔',
                 '불안': '힘듦', '당황': '놀람', '분노': '분노'
             }
         return model, tokenizer, device, post_processing_map
     except Exception as e:
-        # ⭐️ 사용자에게는 간단한 메시지만 보여줍니다.
         st.error(f"🚨 AI 모델을 불러오는 데 실패했습니다. 잠시 후 다시 시도해주세요.")
         return None, None, None, None
 
@@ -98,7 +96,7 @@ def get_spotify_client():
         sp = spotipy.Spotify(client_credentials_manager=client_credentials_manager)
         return sp
     except Exception as e:
-        return None # ⭐️ 사용자에게 오류를 보여주지 않고 조용히 실패
+        return None 
 
 # --- 6. 추천 함수 (TMDB "치유형" 장르) ---
 def get_spotify_ai_recommendations(emotion):
@@ -180,12 +178,10 @@ def recommend(final_emotion):
 st.set_page_config(layout="wide")
 st.title("MOODIARY 💖")
 
-# ⭐️ (1) 모델 로드를 UI에서 분리합니다.
-#    사용자가 보기 전에 미리 로드 시도
+# ⭐️ (1) 모델 로드를 UI에서 분리
 model, tokenizer, device, post_processing_map = load_kobert_model()
 
 # ⭐️ (2) "시스템 상태 확인" expander 전체 삭제
-#    (오류가 났다면 model is None으로 확인 가능)
 
 if 'diary_text' not in st.session_state: st.session_state.diary_text = ""
 if 'final_emotion' not in st.session_state: st.session_state.final_emotion = None
@@ -195,16 +191,16 @@ with col1:
     # ⭐️ (3) Markdown을 사용해 라벨 텍스트 크기 키우기
     st.markdown("### 오늘의 일기를 작성해주세요:")
     st.text_area(
-        "오늘의 일기를 작성해주세요:", # (label_visibility를 위해 label은 남겨둠)
+        "오늘의 일기를 작성해주세요:",
         key='diary_text', 
         height=250, 
-        label_visibility="hidden" # (기존의 작은 라벨은 숨김)
+        label_visibility="hidden"
     )
     
 with col2:
     st.write(" "); st.write(" ")
     
-    # ⭐️ (4) "랜덤 일기 생성" 버튼 및 관련 함수 삭제
+    # ⭐️ (4) "랜덤 일기 생성" 버튼 삭제
     
     def handle_analyze_click():
         diary_content = st.session_state.diary_text
@@ -212,7 +208,6 @@ with col2:
             st.warning("일기를 입력해주세요!")
             st.session_state.final_emotion = None
         elif model is None: 
-            # ⭐️ 모델 로드 실패 시 사용자에게 알림
             st.error("AI 모델이 로드되지 않았습니다. 잠시 후 새로고침 해주세요.")
             st.session_state.final_emotion = None
         else:
@@ -221,7 +216,6 @@ with col2:
                     diary_content, model, tokenizer, device, post_processing_map
                 )
                 st.session_state.final_emotion = emotion
-                # (감정 신뢰도(score)는 계산하지만, UI에 표시하지 않음)
                 
     st.button("🔍 내 하루 감정 분석하기", type="primary", on_click=handle_analyze_click)
 
@@ -231,7 +225,9 @@ if st.session_state.final_emotion:
     
     # ⭐️ (5) "감정 신뢰도" progress bar 삭제
     
-    st.success(f"오늘 하루를 종합해 보면, **'{final_emotion}'**의 감정이 가장 컸네요!")
+    # ⭐️⭐️⭐️ 1. "오늘 하루를 종합해 보면..." st.success 문장 삭제 ⭐️⭐️⭐️
+    # st.success(f"오늘 하루를 종합해 보면, **'{final_emotion}'**의 감정이 가장 컸네요!")
+    
     st.divider()
     st.subheader(f"'{final_emotion}' 감정을 위한 오늘의 Moodiary 추천")
     with st.spinner(f"'{final_emotion}'에 맞는 추천 항목을 찾고 있습니다..."):
@@ -240,13 +236,15 @@ if st.session_state.final_emotion:
     rec_col1, rec_col2 = st.columns(2)
     
     with rec_col1:
-        st.write("🎵 **이런 음악도 들어보세요?**")
+        # ⭐️⭐️⭐️ 2. 추천 제목 글씨 크기 키우기 ⭐️⭐️⭐️
+        st.markdown("#### 🎵 이런 음악도 들어보세요?")
         if recs['음악']:
             for item in recs['음악']: st.write(f"- {item}")
         else: st.write("- 추천을 찾지 못했어요.")
         
     with rec_col2:
-        st.write("🎬 **이런 영화도 추천해요?**")
+        # ⭐️⭐️⭐️ 2. 추천 제목 글씨 크기 키우기 ⭐️⭐️⭐️
+        st.markdown("#### 🎬 이런 영화도 추천해요?")
         if recs['영화']:
             for item in recs['영화']: st.write(f"- {item}")
         else: st.write("- 추천을 찾지 못했어요.")
