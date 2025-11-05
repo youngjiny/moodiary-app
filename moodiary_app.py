@@ -182,27 +182,29 @@ def recommend_music(emotion):
         return [f"Spotify AI 검색 오류: {type(last_exception).__name__}: {last_exception}"]
 
 
-# --- 7) ⭐️ TMDB 추천 (고객님 요청 장르 + 평점 7.5 이상) ---
+# --- 7) ⭐️ TMDB 추천 (호환성 + 평점 7.5 이상) ---
 def recommend_movies(emotion):
+    
+    # ⭐️⭐️⭐️ "똑똑한" 키 로딩 ⭐️⭐️⭐️
+    # 1. [tmdb] 섹션을 먼저 시도
     key = st.secrets.get("tmdb", {}).get("api_key", "")
+    
+    # 2. 만약 [tmdb] 섹션에 키가 없으면, 예전 방식(단일 변수)을 시도
     if not key:
-        return [{"text": "TMDB 연결에 실패했습니다. API 키를 확인해주세요.", "poster": None, "overview": ""}]
+        key = st.secrets.get("TMDB_API_KEY", "")
+    # ⭐️⭐️⭐️ 수정 끝 ⭐️⭐️⭐️
+        
+    if not key:
+        return [{"text": "TMDB 연결에 실패했습니다. (Secrets에서 키를 찾지 못함)", "poster": None, "overview": ""}]
 
-    # ⭐️⭐️⭐️ 고객님 요청대로 "감정별 차등 장르" 적용 ⭐️⭐️⭐️
+    # ⭐️ 고객님 요청 장르 (행복+호러 등)
     GENRES = {
-        # 행복: 코미디(35), 로맨스(10749), 가족(10751) + 호러(27)
         "행복": "35|10749|10751|27",
-        
-        # 분노 (해소): 액션(28), 모험(12), 코미디(35), SF(878)
         "분노": "28|12|35|878",
-        
-        # 슬픔, 힘듦, 놀람 (위로/안정): 코미디(35), 가족(10751), 애니메이션(16), 판타지(14)
         "슬픔": "35|10751|16|14",
         "힘듦": "35|10751|16|14",
         "놀람": "35|10751|16|14",
     }
-    # ⭐️⭐️⭐️ 수정 끝 ⭐️⭐️⭐️
-
     g = GENRES.get(emotion)
     if not g:
         return [{"text": f"[{emotion}]에 대한 장르 맵핑이 없습니다.", "poster": None, "overview": ""}]
@@ -217,7 +219,7 @@ def recommend_movies(emotion):
                 "with_genres": g,
                 "page": 1,
                 "vote_count.gte": 100,
-                "vote_average.gte": 7.5 # ⭐️ 평점 7.5 필터 유지
+                "vote_average.gte": 7.5 # ⭐️ 평점 7.5 필터
             },
             timeout=10,
         )
