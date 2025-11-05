@@ -5,6 +5,7 @@ import requests
 import torch
 from transformers import AutoModelForSequenceClassification, AutoTokenizer, AutoConfig
 import time 
+import streamlit.components.v1 as components # ⭐️⭐️⭐️ 이 줄이 추가되었습니다! (NameError 해결) ⭐️⭐️⭐️
 
 # (선택) Spotify SDK
 try:
@@ -100,7 +101,7 @@ def get_spotify_client():
     except Exception:
         return None
 
-# --- 6) ⭐️ Spotify 추천 (1곡만 나오는 오류 수정) ---
+# --- 6) Spotify 추천 (1곡 오류 수정된 "키워드 검색") ---
 def get_spotify_ai_recommendations(emotion):
     sp = get_spotify_client()
     if not sp:
@@ -135,7 +136,7 @@ def get_spotify_ai_recommendations(emotion):
 
         # 2️⃣ 만약 트랙 검색 결과가 10곡 미만이면, "플레이리스트" 검색으로 추가
         if len(valid) < 10:
-            fallback = sp.search(q=query, type="playlist", limit=10, market="KR") # 쿼리 통일
+            fallback = sp.search(q=query, type="playlist", limit=10, market="KR")
             pls = (fallback.get("playlists") or {}).get("items") or []
             for pl in pls:
                 pid = pl.get("id")
@@ -161,12 +162,8 @@ def get_spotify_ai_recommendations(emotion):
                     if track_id and name:
                         valid.append({"title": name, "artist": artist, "id": track_id})
                 
-                # ⭐️⭐️⭐️ 1곡만 나오는 오류 수정 ⭐️⭐️⭐️
-                # 'if valid: break' (X) -> 'if len(valid) >= 10: break' (O)
-                # 최소 10곡은 모아야 멈춘다
                 if len(valid) >= 10:
                     break 
-                # ⭐️⭐️⭐️ 수정 끝 ⭐️⭐️⭐️
 
         # 3️⃣ 그래도 10곡 미만이면, 최신 TOP 트랙으로 추가
         if len(valid) < 10:
@@ -183,7 +180,6 @@ def get_spotify_ai_recommendations(emotion):
         if not valid:
             return [{"title": "추천 없음", "artist": "Spotify API 문제", "id": None}]
         
-        # ⭐️ 중복 제거 (트랙 검색과 플레이리스트 검색에서 겹칠 수 있음)
         unique_tracks = {t['id']: t for t in valid}.values()
         
         return random.sample(list(unique_tracks), k=min(3, len(unique_tracks)))
@@ -288,7 +284,7 @@ def handle_analyze_click():
 
 st.button("🔍 내 하루 감정 분석하기", type="primary", on_click=handle_analyze_click)
 
-# --- 10) ⭐️ 결과/추천 출력 (UI 레이아웃 최종 수정) ---
+# --- 10) 결과/추천 출력 (UI 레이아웃 최종 수정) ---
 if st.session_state.final_emotion:
     emo = st.session_state.final_emotion
     sc = st.session_state.confidence
@@ -305,12 +301,10 @@ if st.session_state.final_emotion:
     music_items = recs.get("음악", [])
     movie_items = recs.get("영화", [])
 
-    # ⭐️⭐️⭐️ UI 정렬을 위한 새 로직 ⭐️⭐️⭐️
-    # (항목 3개에 맞춰 3번 반복)
     for i in range(3):
         col_music, col_movie = st.columns(2)
 
-        # --- 음악 컬럼 (⭐️ 재생 버튼으로 변경) ---
+        # --- 음악 컬럼 (재생 버튼) ---
         with col_music:
             if i == 0: 
                 st.markdown("#### 🎵 이런 음악도 들어보세요?")
@@ -320,15 +314,14 @@ if st.session_state.final_emotion:
                 if isinstance(it, dict):
                     track_id = it.get("id")
                     if track_id:
-                        # ⭐️ Spotify 임베드 플레이어 사용 (높이 152px)
                         embed_url = f"https://open.spotify.com/embed/track/{track_id}?utm_source=generator&theme=0"
-                        components.iframe(embed_url, height=152)
+                        components.iframe(embed_url, height=152) # ⭐️ 이 코드가 'components'를 사용
                     else:
                         st.write(f"- {it.get('title', '오류')}")
                 else:
                     st.write(f"- {it}")
             
-        # --- 영화 컬럼 (⭐️ 정렬 맞춤) ---
+        # --- 영화 컬럼 (정렬 맞춤) ---
         with col_movie:
             if i == 0: 
                 st.markdown("#### 🎬 이런 영화도 추천해요?")
@@ -343,7 +336,6 @@ if st.session_state.final_emotion:
                     title = it.get("title", "제목없음")
                     year = it.get("year", "N/A")
                     rating = float(it.get("rating", 0.0))
-                    
                     overview = it.get("overview", "") 
                     
                     line = f"##### **{title} ({year})**\n⭐ {rating:.1f}\n\n*{overview}*"
@@ -351,5 +343,4 @@ if st.session_state.final_emotion:
                 else:
                     st.write(f"- {it}")
 
-        # ⭐️⭐️⭐️ "실선"을 컬럼 밖, 루프 안에 둬서 라인을 맞춤 ⭐️⭐️⭐️
         st.markdown("---")
