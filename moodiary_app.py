@@ -20,10 +20,6 @@ KOBERT_BASE_MODEL = "monologg/kobert"
 KOBERT_SAVED_REPO = "Young-jin/kobert-moodiary-app" # 학습 가중치(HF)
 TMDB_BASE_URL = "https://api.themoviedb.org/3"
 
-# ⭐️⭐️⭐️ "Secrets" 우회: TMDB API 키를 코드에 직접 하드코딩 ⭐️⭐️⭐️
-HARDCODED_TMDB_KEY = "8587d6734fd278ecc05dcbe710c29f9c"
-# ⭐️⭐️⭐️ (이것이 "TMDB 연결 실패"를 해결할 것입니다) ⭐️⭐️⭐️
-
 st.set_page_config(layout="wide")
 st.title("MOODIARY 💖")
 
@@ -94,8 +90,7 @@ def analyze_diary_kobert(text, model, tokenizer, device, post_processing_map):
 def get_spotify_client():
     if spotipy is None or SpotifyClientCredentials is None:
         return None
-    # ⭐️ Spotify는 Secrets가 잘 작동하므로 그대로 둡니다.
-    creds = st.secrets.get("spotify", {}) 
+    creds = st.secrets.get("spotify", {})
     cid = creds.get("client_id")
     secret = creds.get("client_secret")
     if not cid or not secret:
@@ -106,7 +101,7 @@ def get_spotify_client():
     except Exception:
         return None
 
-# --- 6) Spotify 추천 (키워드 검색 + 404 방어) ---
+# --- 6) Spotify 추천 (키워드 변경 적용) ---
 def recommend_music(emotion):
     sp = get_spotify_client()
     if not sp:
@@ -118,7 +113,8 @@ def recommend_music(emotion):
     KR_KEYWORDS = {
         "행복": ["케이팝 최신", "국내 신나는 노래", "여름 노래", "K-pop happy"],
         "슬픔": ["발라드 최신", "이별 노래", "감성 케이팝", "K-ballad"],
-        "분노": ["운동 음악", "락", "파워 송", "K-rock"],
+        # ⭐️⭐️⭐️ 고객님 요청대로 키워드 변경 ⭐️⭐️⭐️
+        "분노": ["인기 밴드", "팝송", "스트레스", "재즈"], 
         "힘듦": ["위로 노래", "힐링 케이팝", "잔잔한 팝"],
         "놀람": ["파티 케이팝", "EDM 케이팝", "페스티벌 음악"],
     }
@@ -139,7 +135,7 @@ def recommend_music(emotion):
                 valid.append({"title": name, "artist": artist, "id": track_id}) 
 
         if not valid:
-            fallback = sp.search(q="K-pop Hits Korea 2020-2025", type="playlist", limit=10, market="KR")
+            fallback = sp.search(q=query, type="playlist", limit=10, market="KR")
             pls = (fallback.get("playlists") or {}).get("items") or []
             for pl in pls:
                 pid = pl.get("id")
@@ -187,16 +183,12 @@ def recommend_music(emotion):
         return [f"Spotify AI 검색 오류: {type(last_exception).__name__}: {last_exception}"]
 
 
-# --- 7) ⭐️ TMDB 추천 (키 "하드코딩") ---
+# --- 7) TMDB 추천 (평점 7.5 이상) ---
 def recommend_movies(emotion):
-    
-    # ⭐️ "Secrets" 대신 "하드코딩된" 변수(HARDCODED_TMDB_KEY)를 사용합니다.
-    key = HARDCODED_TMDB_KEY
-        
+    key = st.secrets.get("tmdb", {}).get("api_key", "")
     if not key:
-        return [{"text": "TMDB 키가 코드에 하드코딩되지 않았습니다.", "poster": None, "overview": ""}]
+        return [{"text": "TMDB 연결에 실패했습니다. API 키를 확인해주세요.", "poster": None, "overview": ""}]
 
-    # ⭐️ 고객님 요청 장르 (행복+호러 등)
     GENRES = {
         "행복": "35|10749|10751|27",
         "분노": "28|12|35|878",
@@ -218,7 +210,7 @@ def recommend_movies(emotion):
                 "with_genres": g,
                 "page": 1,
                 "vote_count.gte": 100,
-                "vote_average.gte": 7.5 # ⭐️ 평점 7.5 필터
+                "vote_average.gte": 7.5 
             },
             timeout=10,
         )
@@ -258,24 +250,11 @@ def recommend(emotion):
         "영화": recommend_movies(emotion),
     }
 
-# --- 9) ⭐️ 상태/입력/실행 (디버깅 코드 제거) ---
+# --- 9) 상태/입력/실행 ---
 with st.expander("⚙️ 시스템 상태 확인"):
     with st.spinner("모델 로드 중..."):
         model, tokenizer, device, postmap = load_kobert_model()
     st.write("✅ 모델 로드 완료" if model else "❌ 모델 로드 실패")
-    
-    # ⭐️ 디버깅 코드를 제거하고, Secrets가 아닌 하드코딩된 키를 사용하므로
-    # ⭐️ TMDB 확인 로직도 하드코딩된 키를 확인합니다.
-    if st.secrets.get("spotify", {}).get("client_id"): 
-        st.success("✅ Spotify 인증 정보 (Secrets)를 찾았습니다.")
-    else: 
-        st.error("❌ Spotify 인증 정보 (Secrets)를 찾지 못했습니다.")
-
-    if HARDCODED_TMDB_KEY:
-        st.success("✅ TMDB API 키 (하드코딩)가 존재합니다.")
-    else:
-        st.error("❌ TMDB API 키 (하드코딩)가 비어있습니다.")
-
 
 if "diary_text" not in st.session_state:
     st.session_state.diary_text = ""
