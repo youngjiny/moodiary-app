@@ -7,3 +7,5 @@ torch
 transformers
 sentencepiece
 streamlit-calendar
+gspread
+google-auth
