@@ -103,7 +103,7 @@ def get_spotify_client():
     except Exception:
         return None
 
-# --- 6) Spotify 추천 ---
+# --- 6) Spotify 추천 (2010년 이후로 변경) ---
 def recommend_music(emotion):
     sp = get_spotify_client()
     if not sp:
@@ -120,7 +120,8 @@ def recommend_music(emotion):
         "놀람": ["파티 케이팝", "EDM 케이팝", "페스티벌 음악"],
     }
 
-    query = random.choice(KR_KEYWORDS.get(emotion, ["케이팝 최신"])) + " year:2015-2025"
+    # ⭐️⭐️⭐️ 2010년 이후로 변경 (year:2010-2025) ⭐️⭐️⭐️
+    query = random.choice(KR_KEYWORDS.get(emotion, ["케이팝 최신"])) + " year:2010-2025"
 
     try:
         res = sp.search(q=query, type="track", limit=50, market="KR")
@@ -131,6 +132,7 @@ def recommend_music(emotion):
             name = t.get("name")
             artists = t.get("artists") or []
             artist = artists[0].get("name") if artists else "Unknown"
+            # (여기서도 한 번 더 연도 체크를 할 수 있지만, 검색 쿼리가 더 확실합니다)
             if track_id and name and (is_korean(name) or is_korean(artist)):
                 valid.append({"title": name, "artist": artist, "id": track_id}) 
 
@@ -157,17 +159,6 @@ def recommend_music(emotion):
                 if len(valid) >= 10: break 
 
         if not valid:
-            top = sp.search(q="top hits 2024", type="track", limit=50, market="KR")
-            titems = (top.get("tracks") or {}).get("items") or []
-            for t in titems:
-                track_id = t.get("id")
-                name = t.get("name")
-                artists = t.get("artists") or []
-                artist = artists[0].get("name") if artists else "Unknown"
-                if track_id and name:
-                    valid.append({"title": name, "artist": artist, "id": track_id})
-
-        if not valid:
             return [{"title": "추천 없음", "artist": "Spotify API 문제", "id": None}]
         
         unique_tracks = {t['id']: t for t in valid}.values()
@@ -177,7 +168,7 @@ def recommend_music(emotion):
         return [f"Spotify AI 검색 오류: {type(e).__name__}: {e}"]
 
 
-# --- 7) ⭐️ TMDB 추천 (고객 요청 5가지 조건 적용) ---
+# --- 7) TMDB 추천 (평점 8.0+, 2020년+, 애니 제외) ---
 def recommend_movies(emotion):
     key = st.secrets.get("tmdb", {}).get("api_key", "")
     if not key:
@@ -191,16 +182,15 @@ def recommend_movies(emotion):
     GENRES = {
         "행복": "35|10749|10751|27",
         "분노": "28|12|35|878",
-        "슬픔": "35|10751|14", # (애니메이션 16 제거)
-        "힘듦": "35|10751|14", # (애니메이션 16 제거)
-        "놀람": "35|10751|14", # (애니메이션 16 제거)
+        "슬픔": "35|10751|14",
+        "힘듦": "35|10751|14",
+        "놀람": "35|10751|14",
     }
     g = GENRES.get(emotion)
     if not g:
         return [{"text": f"[{emotion}]에 대한 장르 맵핑이 없습니다.", "poster": None, "overview": ""}]
 
     try:
-        # ⭐️⭐️⭐️ TMDB API 파라미터 대폭 수정 ⭐️⭐️⭐️
         r = requests.get(
             f"{TMDB_BASE_URL}/discover/movie",
             params={
@@ -208,11 +198,11 @@ def recommend_movies(emotion):
                 "language": "ko-KR",
                 "sort_by": "popularity.desc",
                 "with_genres": g,
-                "without_genres": "16",              # ⭐️ 3. 애니메이션(16) 제외
+                "without_genres": "16",
                 "page": 1,
-                "vote_count.gte": 100,               # ⭐️ 5. 투표수 100 이상
-                "vote_average.gte": 8.0,             # ⭐️ 4. 평점 8.0 이상
-                "primary_release_date.gte": "2020-01-01" # ⭐️ 1. 2020년 이후 개봉
+                "vote_count.gte": 100,
+                "vote_average.gte": 8.0,
+                "primary_release_date.gte": "2020-01-01"
             },
             timeout=10,
         )
@@ -220,7 +210,7 @@ def recommend_movies(emotion):
         results = r.json().get("results", [])
 
         if not results:
-            return [{"text": f"조건(2020년 이후, 평점 8.0+)에 맞는 [{emotion}] 영화가 없습니다.", "poster": None, "overview": ""}]
+            return [{"text": f"조건(2020년+, 평점 8.0+)에 맞는 [{emotion}] 영화가 없습니다.", "poster": None, "overview": ""}]
 
         picks = results if len(results) <= 3 else random.sample(results, 3)
         out = []
@@ -295,7 +285,7 @@ def refresh_movies():
         with st.spinner("새로운 영화를 찾고 있어요..."):
             st.session_state.movie_recs = recommend_movies(st.session_state.final_emotion)
 
-# --- 11) 입력 UI ---
+# --- 11) 입력 UI (콜백 연결) ---
 col1, col2 = st.columns([3, 1])
 with col1:
     st.markdown("### 오늘의 일기를 작성해주세요:")
