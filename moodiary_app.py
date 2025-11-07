@@ -17,8 +17,11 @@ except Exception:
 
 # --- 2) 기본 설정 ---
 KOBERT_BASE_MODEL = "monologg/kobert"
-KOBERT_SAVED_REPO = "Young-jin/kobert-moodiary-app" # 학습 가중치(HF)
+KOBERT_SAVED_REPO = "Young-jin/kobert-moodiary-app" 
 TMDB_BASE_URL = "https://api.themoviedb.org/3"
+
+# ⭐️⭐️⭐️ 비상용 TMDB 키 하드코딩 ⭐️⭐️⭐️
+EMERGENCY_TMDB_KEY = "8587d6734fd278ecc05dcbe710c29f9c"
 
 st.set_page_config(layout="wide")
 st.title("MOODIARY 💖")
@@ -101,7 +104,7 @@ def get_spotify_client():
     except Exception:
         return None
 
-# --- 6) Spotify 추천 (키워드 변경 적용) ---
+# --- 6) Spotify 추천 (키워드 검색 + 404 방어) ---
 def recommend_music(emotion):
     sp = get_spotify_client()
     if not sp:
@@ -113,8 +116,7 @@ def recommend_music(emotion):
     KR_KEYWORDS = {
         "행복": ["케이팝 최신", "국내 신나는 노래", "여름 노래", "K-pop happy"],
         "슬픔": ["발라드 최신", "이별 노래", "감성 케이팝", "K-ballad"],
-        # ⭐️⭐️⭐️ 고객님 요청대로 키워드 변경 ⭐️⭐️⭐️
-        "분노": ["인기 밴드", "팝송", "스트레스", "재즈"], 
+        "분노": ["인기 밴드", "팝송", "스트레스", "재즈"],
         "힘듦": ["위로 노래", "힐링 케이팝", "잔잔한 팝"],
         "놀람": ["파티 케이팝", "EDM 케이팝", "페스티벌 음악"],
     }
@@ -183,11 +185,19 @@ def recommend_music(emotion):
         return [f"Spotify AI 검색 오류: {type(last_exception).__name__}: {last_exception}"]
 
 
-# --- 7) TMDB 추천 (평점 7.5 이상) ---
+# --- 7) ⭐️ TMDB 추천 (비상키 사용 + 평점 7.5) ---
 def recommend_movies(emotion):
+    # ⭐️⭐️⭐️ 1. Secrets에서 먼저 시도 ⭐️⭐️⭐️
     key = st.secrets.get("tmdb", {}).get("api_key", "")
     if not key:
-        return [{"text": "TMDB 연결에 실패했습니다. API 키를 확인해주세요.", "poster": None, "overview": ""}]
+        key = st.secrets.get("TMDB_API_KEY", "")
+    
+    # ⭐️⭐️⭐️ 2. 실패하면 비상용 하드코딩 키 사용 ⭐️⭐️⭐️
+    if not key:
+        key = EMERGENCY_TMDB_KEY
+
+    if not key:
+        return [{"text": "TMDB 연결 실패 (모든 키 확인 불가)", "poster": None, "overview": ""}]
 
     GENRES = {
         "행복": "35|10749|10751|27",
@@ -251,11 +261,7 @@ def recommend(emotion):
     }
 
 # --- 9) 상태/입력/실행 ---
-with st.expander("⚙️ 시스템 상태 확인"):
-    with st.spinner("모델 로드 중..."):
-        model, tokenizer, device, postmap = load_kobert_model()
-    st.write("✅ 모델 로드 완료" if model else "❌ 모델 로드 실패")
-
+# ⭐️ (시스템 상태 확인은 이제 사용자에게 안 보이게 삭제했습니다)
 if "diary_text" not in st.session_state:
     st.session_state.diary_text = ""
 if "final_emotion" not in st.session_state:
@@ -267,6 +273,9 @@ if "music_recs" not in st.session_state:
 if "movie_recs" not in st.session_state:
     st.session_state.movie_recs = []
 
+# ⭐️ 모델 로드 (조용히)
+model, tokenizer, device, postmap = load_kobert_model()
+
 # --- 10) 버튼 콜백(Callback) 함수 정의 ---
 def handle_analyze_click():
     txt = st.session_state.diary_text
@@ -274,7 +283,7 @@ def handle_analyze_click():
         st.warning("일기를 입력해주세요.")
         return
     if model is None:
-        st.error("AI 모델이 로드되지 않았습니다.")
+        st.error("AI 모델 로드에 실패했습니다. 잠시 후 다시 시도해주세요.")
         return
     with st.spinner("AI가 분석 중입니다..."):
         emo, sc = analyze_diary_kobert(txt, model, tokenizer, device, postmap)
@@ -296,18 +305,20 @@ def refresh_movies():
             st.session_state.movie_recs = recommend_movies(st.session_state.final_emotion)
 
 # --- 11) 입력 UI (콜백 연결) ---
-st.text_area("오늘의 일기를 작성해주세요:", key="diary_text", height=230)
+col1, col2 = st.columns([3, 1])
+with col1:
+    st.markdown("### 오늘의 일기를 작성해주세요:")
+    st.text_area(" ", key="diary_text", height=230, label_visibility="collapsed")
 
-st.button("🔍 내 하루 감정 분석하기", type="primary", on_click=handle_analyze_click)
+with col2:
+    st.write(" "); st.write(" ")
+    st.write(" "); st.write(" ")
+    st.button("🔍 내 하루 감정 분석하기", type="primary", on_click=handle_analyze_click, use_container_width=True)
 
-# --- 12) 결과/추천 출력 (UI 레이아웃 최종 수정) ---
+# --- 12) 결과/추천 출력 (UI 레이아웃 최종) ---
 if st.session_state.final_emotion:
     emo = st.session_state.final_emotion
-    sc = st.session_state.confidence
-
     st.subheader(f"오늘 하루의 핵심 감정은 '{emo}' 입니다.")
-    st.progress(sc, text=f"감정 신뢰도: {sc:.2%}")
-
     st.divider()
     st.subheader(f"'{emo}' 감정을 위한 오늘의 Moodiary 추천")
 
@@ -317,7 +328,7 @@ if st.session_state.final_emotion:
     for i in range(3):
         col_music, col_movie = st.columns(2)
 
-        # --- 음악 컬럼 (재생 버튼 + 다른 추천 버튼) ---
+        # --- 음악 컬럼 ---
         with col_music:
             if i == 0: 
                 st.markdown("#### 🎵 이런 음악도 들어보세요?")
@@ -335,7 +346,7 @@ if st.session_state.final_emotion:
                 else:
                     st.write(f"- {it}")
             
-        # --- 영화 컬럼 (정렬 맞춤 + 다른 추천 버튼) ---
+        # --- 영화 컬럼 ---
         with col_movie:
             if i == 0: 
                 st.markdown("#### 🎬 이런 영화도 추천해요?")
@@ -358,7 +369,6 @@ if st.session_state.final_emotion:
                 
                 elif isinstance(it, dict):
                     st.error(it.get("text", "알 수 없는 영화 추천 오류"))
-                
                 else:
                     st.error(f"- {it}")
 
