@@ -103,13 +103,13 @@ def get_spotify_client():
     except Exception:
         return None
 
-# --- 6) Spotify 추천 (국가 제한 + 중복 방지) ---
+# --- 6) Spotify 추천 (노키즈존 + 국가 제한 + 중복 방지) ---
 def recommend_music(emotion):
     sp = get_spotify_client()
     if not sp:
         return ["Spotify 연결 실패 (Secrets 누락 또는 클라이언트 초기화 실패)"]
 
-    # ⭐️⭐️⭐️ 1. 한/미/일 한정 키워드 (동요 제외) ⭐️⭐️⭐️
+    # 1. 한/미/일 한정 키워드
     COUNTRY_KEYWORDS = {
         "행복": ["K-Pop Dance", "J-Pop Happy Hits", "American Pop Upbeat"],
         "슬픔": ["K-Pop Ballad", "J-Pop Sad", "US Pop Sad Songs"],
@@ -119,11 +119,11 @@ def recommend_music(emotion):
     }
     
     base_query = random.choice(COUNTRY_KEYWORDS.get(emotion, ["K-Pop"]))
-    # (2010년 이후, 키즈 제외 필터 유지)
-    query = f"{base_query} year:2010-2025 NOT children NOT nursery"
+    
+    # ⭐️⭐️⭐️ 강력한 노키즈 필터 적용 ⭐️⭐️⭐️
+    query = f"{base_query} year:2010-2025 NOT children NOT nursery NOT 동요 NOT 키즈 NOT 어린이"
 
     try:
-        # 검색 결과 50개 가져오기
         res = sp.search(q=query, type="track", limit=50)
         tracks = (res.get("tracks") or {}).get("items") or []
         
@@ -133,28 +133,21 @@ def recommend_music(emotion):
             name = t.get("name")
             artists = t.get("artists") or []
             artist = artists[0].get("name") if artists else "Unknown"
-            album = t.get("album") or {}
-            images = album.get("images") or []
-            cover = images[0]["url"] if images else None
             
-            # ⭐️⭐️⭐️ 2. 중복 방지 필터링 ⭐️⭐️⭐️
-            # (이미 추천했던 곡이면 건너뜀)
+            # 2. 중복 방지 필터링
             if tid and tid not in st.session_state.recent_music_ids:
-                valid_candidates.append({"title": name, "artist": artist, "id": tid, "cover": cover})
+                valid_candidates.append({"title": name, "artist": artist, "id": tid})
 
         if not valid_candidates:
-            # (만약 중복 제외하고 남은 게 없으면, 기록 초기화 후 재시도 - 극단적인 경우)
-             st.session_state.recent_music_ids = []
+             st.session_state.recent_music_ids = [] # 기록 초기화 후 재시도 유도
              return ["새로운 추천 곡을 찾을 수 없습니다. 다시 시도해주세요."]
 
-        # 3개 랜덤 선택
         final_picks = random.sample(valid_candidates, k=min(3, len(valid_candidates)))
         
-        # ⭐️⭐️⭐️ 3. 추천 기록 업데이트 ⭐️⭐️⭐️
+        # 3. 추천 기록 업데이트
         for pick in final_picks:
             st.session_state.recent_music_ids.append(pick["id"])
             
-        # 기록이 너무 길어지면(60개 초과) 오래된 것부터 삭제
         if len(st.session_state.recent_music_ids) > 60:
              st.session_state.recent_music_ids = st.session_state.recent_music_ids[-60:]
 
@@ -164,7 +157,7 @@ def recommend_music(emotion):
         return [f"Spotify 검색 오류: {type(e).__name__}: {e}"]
 
 
-# --- 7) TMDB 추천 (중복 방지 + 다양성) ---
+# --- 7) TMDB 추천 (2000년+, 평점 7.5+, 투표 1000+, 중복 방지) ---
 def recommend_movies(emotion):
     key = st.secrets.get("tmdb", {}).get("api_key", "")
     if not key:
@@ -187,8 +180,8 @@ def recommend_movies(emotion):
         return [{"text": f"[{emotion}] 장르 매핑 오류", "poster": None, "overview": ""}]
 
     try:
-        # ⭐️⭐️⭐️ 중복 방지를 위해 페이지를 랜덤으로 섞음 (1~5페이지) ⭐️⭐️⭐️
-        random_page = random.randint(1, 5)
+        # 중복 방지를 위해 페이지 랜덤화 (1~10페이지)
+        random_page = random.randint(1, 10)
         
         r = requests.get(
             f"{TMDB_BASE_URL}/discover/movie",
@@ -197,11 +190,11 @@ def recommend_movies(emotion):
                 "language": "ko-KR",
                 "sort_by": "popularity.desc",
                 "with_genres": g,
-                "without_genres": "16",
-                "page": random_page,         # ⭐️ 랜덤 페이지 요청
-                "vote_count.gte": 1000,
-                "vote_average.gte": 7.5,
-                "primary_release_date.gte": "2000-01-01"
+                "without_genres": "16",      # 애니메이션 제외
+                "page": random_page,         # 랜덤 페이지
+                "vote_count.gte": 1000,      # 투표 1000 이상
+                "vote_average.gte": 7.5,     # 평점 7.5 이상
+                "primary_release_date.gte": "2000-01-01" # 2000년 이후
             },
             timeout=10,
         )
@@ -209,15 +202,26 @@ def recommend_movies(emotion):
         results = r.json().get("results", [])
 
         if not results:
-            # (해당 페이지에 없으면 1페이지로 재시도)
-             r = requests.get(f"{TMDB_BASE_URL}/discover/movie", params={...: ..., "page": 1}, timeout=10) # (약식 표현)
-             # (실제 코드는 복잡해지니, 일단 빈 리스트 반환 시 1페이지 재요청 로직은 생략하고 간단히 처리)
-             return [{"text": f"조건에 맞는 영화가 부족합니다.", "poster": None, "overview": ""}]
+             # 해당 페이지에 없으면 1페이지로 재시도
+             r = requests.get(
+                f"{TMDB_BASE_URL}/discover/movie",
+                params={
+                    "api_key": key, "language": "ko-KR", "sort_by": "popularity.desc",
+                    "with_genres": g, "without_genres": "16", "page": 1,
+                    "vote_count.gte": 1000, "vote_average.gte": 7.5,
+                    "primary_release_date.gte": "2000-01-01"
+                },
+                timeout=10,
+             )
+             r.raise_for_status()
+             results = r.json().get("results", [])
+             if not results:
+                 return [{"text": f"조건에 맞는 명작 영화가 부족합니다.", "poster": None, "overview": ""}]
 
         valid_candidates = []
         for m in results:
             mid = m.get("id")
-            # ⭐️⭐️⭐️ 중복 방지 필터링 ⭐️⭐️⭐️
+            # 중복 방지 필터링
             if mid and mid not in st.session_state.recent_movie_ids:
                 title = m.get("title", "제목없음")
                 year = (m.get("release_date") or "")[:4] or "N/A"
@@ -240,7 +244,7 @@ def recommend_movies(emotion):
 
         final_picks = random.sample(valid_candidates, k=min(3, len(valid_candidates)))
 
-        # ⭐️⭐️⭐️ 추천 기록 업데이트 ⭐️⭐️⭐️
+        # 추천 기록 업데이트
         for pick in final_picks:
             st.session_state.recent_movie_ids.append(pick["id"])
         
@@ -275,7 +279,7 @@ if "music_recs" not in st.session_state:
 if "movie_recs" not in st.session_state:
     st.session_state.movie_recs = []
 
-# ⭐️⭐️⭐️ 중복 방지를 위한 기록 저장소 초기화 ⭐️⭐️⭐️
+# 중복 방지를 위한 기록 저장소
 if "recent_music_ids" not in st.session_state:
     st.session_state.recent_music_ids = []
 if "recent_movie_ids" not in st.session_state:
