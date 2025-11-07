@@ -103,57 +103,87 @@ def get_spotify_client():
     except Exception:
         return None
 
-# --- 6) Spotify 추천 (필터 완화 + 중복 방지) ---
+# --- 6) ⭐️ Spotify 추천 (잘 되던 이전 로직으로 복구) ---
 def recommend_music(emotion):
     sp = get_spotify_client()
     if not sp:
-        return ["Spotify 연결 실패 (Secrets 확인 필요)"]
+        return ["Spotify 연결 실패 (Secrets 누락 또는 클라이언트 초기화 실패)"]
 
-    # ⭐️ 한/미/일 키워드 (동요 제외 필터는 쿼리에 적용)
-    SEARCH_KEYWORDS = {
-        "행복": ["K-Pop Dance", "Pop Hits Happy", "J-Pop Upbeat"],
-        "슬픔": ["K-Pop Ballad", "Sad Pop", "J-Pop Sad"],
-        "분노": ["K-Rock", "Hard Rock", "J-Rock"],
-        "힘듦": ["K-Indie Healing", "Acoustic Pop", "Chill J-Pop"],
-        "놀람": ["K-Pop EDM", "Festival Music", "Party Pop"],
+    def is_korean(txt):
+        return isinstance(txt, str) and any('가' <= ch <= '힣' for ch in txt)
+
+    KR_KEYWORDS = {
+        # ⭐️ 요청하신 행복 키워드 반영
+        "행복": ["여행", "행복", "케이팝 최신", "여름 노래"],
+        "슬픔": ["발라드 최신", "이별 노래", "감성 케이팝", "K-ballad"],
+        "분노": ["인기 밴드", "팝송", "스트레스", "재즈"],
+        "힘듦": ["위로 노래", "힐링 케이팝", "잔잔한 팝"],
+        "놀람": ["파티 케이팝", "EDM 케이팝", "페스티벌 음악"],
     }
-    
-    base_query = random.choice(SEARCH_KEYWORDS.get(emotion, ["Pop"]))
-    # ⭐️ 2010년 이후, 키즈 제외
-    query = f"{base_query} year:2010-2025 NOT children NOT nursery"
+
+    query = random.choice(KR_KEYWORDS.get(emotion, ["케이팝 최신"])) + " year:2010-2025"
 
     try:
-        res = sp.search(q=query, type="track", limit=50)
+        # 1️⃣ 트랙 직접 검색
+        res = sp.search(q=query, type="track", limit=50, market="KR")
         tracks = (res.get("tracks") or {}).get("items") or []
-        
-        valid_candidates = []
+        valid = []
         for t in tracks:
-            tid = t.get("id")
-            # ⭐️ 중복 방지 확인
-            if tid and tid not in st.session_state.recent_music_ids:
-                valid_candidates.append(tid)
+            track_id = t.get("id")
+            name = t.get("name")
+            artists = t.get("artists") or []
+            artist = artists[0].get("name") if artists else "Unknown"
+            # ⭐️ ID뿐만 아니라 정보 전체를 저장 (이 부분이 중요했습니다!)
+            if track_id and name and (is_korean(name) or is_korean(artist)):
+                valid.append({"title": name, "artist": artist, "id": track_id}) 
 
-        if not valid_candidates:
-             # 검색 결과가 없으면 기록 초기화 후 한 번 더 기회 제공
-             st.session_state.recent_music_ids = []
-             return ["새로운 곡을 찾지 못했습니다. 다시 눌러주세요."]
+        # 2️⃣ 트랙이 부족하면 플레이리스트 검색으로 보충
+        if len(valid) < 10:
+            fallback = sp.search(q=query, type="playlist", limit=10, market="KR")
+            pls = (fallback.get("playlists") or {}).get("items") or []
+            for pl in pls:
+                pid = pl.get("id")
+                if not pid: continue 
+                try:
+                    items = (sp.playlist_items(pid, limit=50, market="KR") or {}).get("items") or []
+                except spotipy.exceptions.SpotifyException:
+                    continue 
+                
+                for it in items:
+                    tr = (it or {}).get("track") or {}
+                    if not tr: continue
+                    track_id = tr.get("id")
+                    name = tr.get("name")
+                    artists = tr.get("artists") or []
+                    artist = artists[0].get("name") if artists else "Unknown"
+                    if track_id and name:
+                        valid.append({"title": name, "artist": artist, "id": track_id})
+                if len(valid) >= 10: break 
 
-        # 최대 3개 선택
-        final_ids = random.sample(valid_candidates, k=min(3, len(valid_candidates)))
+        # 3️⃣ 그래도 부족하면 최신 탑 트랙으로 보충
+        if len(valid) < 10:
+            top = sp.search(q="K-Pop Hits 2024", type="track", limit=50, market="KR")
+            titems = (top.get("tracks") or {}).get("items") or []
+            for t in titems:
+                track_id = t.get("id")
+                name = t.get("name")
+                artists = t.get("artists") or []
+                artist = artists[0].get("name") if artists else "Unknown"
+                if track_id and name:
+                    valid.append({"title": name, "artist": artist, "id": track_id})
+
+        if not valid:
+            return [{"title": "추천 없음", "artist": "Spotify API 문제", "id": None}]
         
-        # 기록 업데이트
-        for fid in final_ids:
-            st.session_state.recent_music_ids.append(fid)
-        if len(st.session_state.recent_music_ids) > 60:
-             st.session_state.recent_music_ids = st.session_state.recent_music_ids[-60:]
-
-        return final_ids # ⭐️ ID 리스트만 반환 (UI에서 처리)
+        # 중복 제거 후 3곡 선택
+        unique_tracks = {t['id']: t for t in valid}.values()
+        return random.sample(list(unique_tracks), k=min(3, len(unique_tracks)))
 
     except Exception as e:
-        return [f"Spotify 오류: {e}"]
+        return [f"Spotify 검색 오류: {type(e).__name__}: {e}"]
 
 
-# --- 7) TMDB 추천 (2000년+, 평점 7.5+, 투표 1000+, 중복 방지) ---
+# --- 7) TMDB 추천 (최신 유지) ---
 def recommend_movies(emotion):
     key = st.secrets.get("tmdb", {}).get("api_key", "")
     if not key:
@@ -176,7 +206,7 @@ def recommend_movies(emotion):
         return [{"text": f"[{emotion}] 장르 매핑 오류", "poster": None, "overview": ""}]
 
     try:
-        # 페이지 랜덤화 (중복 방지)
+        # 페이지 랜덤화 (다양한 추천)
         random_page = random.randint(1, 5)
         
         r = requests.get(
@@ -186,11 +216,11 @@ def recommend_movies(emotion):
                 "language": "ko-KR",
                 "sort_by": "popularity.desc",
                 "with_genres": g,
-                "without_genres": "16",      
+                "without_genres": "16",
                 "page": random_page,
-                "vote_count.gte": 1000,      
-                "vote_average.gte": 7.5,     
-                "primary_release_date.gte": "2000-01-01" 
+                "vote_count.gte": 1000,      # 투표 1000+
+                "vote_average.gte": 7.5,     # 평점 7.5+
+                "primary_release_date.gte": "2000-01-01" # 2000년+
             },
             timeout=10,
         )
@@ -214,38 +244,25 @@ def recommend_movies(emotion):
              if not results:
                  return [{"text": f"조건에 맞는 명작 영화가 부족합니다.", "poster": None, "overview": ""}]
 
-        valid_candidates = []
-        for m in results:
-            mid = m.get("id")
-            if mid and mid not in st.session_state.recent_movie_ids:
-                title = m.get("title", "제목없음")
-                year = (m.get("release_date") or "")[:4] or "N/A"
-                rating = m.get("vote_average", 0.0)
-                poster = f"https://image.tmdb.org/t/p/w500{m['poster_path']}" if m.get("poster_path") else None
-                overview = m.get("overview", "")
+        picks = results if len(results) <= 3 else random.sample(results, 3)
+        out = []
+        for m in picks:
+            title = m.get("title", "제목없음")
+            year = (m.get("release_date") or "")[:4] or "N/A"
+            rating = m.get("vote_average", 0.0)
+            poster = f"https://image.tmdb.org/t/p/w500{m['poster_path']}" if m.get("poster_path") else None
+            overview = m.get("overview", "줄거리 정보가 없습니다.")
+            if not overview: 
+                overview = "줄거리 정보가 없습니다."
                 
-                valid_candidates.append({
-                    "id": mid,
-                    "poster": poster,
-                    "title": title,
-                    "year": year,
-                    "rating": rating,
-                    "overview": overview 
-                })
-
-        if not valid_candidates:
-             st.session_state.recent_movie_ids = [] 
-             return [{"text": "새로운 영화를 찾을 수 없습니다. 다시 시도해주세요.", "poster": None, "overview": ""}]
-
-        final_picks = random.sample(valid_candidates, k=min(3, len(valid_candidates)))
-
-        for pick in final_picks:
-            st.session_state.recent_movie_ids.append(pick["id"])
-        if len(st.session_state.recent_movie_ids) > 60:
-            st.session_state.recent_movie_ids = st.session_state.recent_movie_ids[-60:]
-
-        return final_picks
-
+            out.append({
+                "poster": poster,
+                "title": title,
+                "year": year,
+                "rating": rating,
+                "overview": overview 
+            })
+        return out
     except Exception as e:
         return [{"text": f"TMDb 오류: {type(e).__name__}: {e}", "poster": None, "overview": ""}]
 
@@ -258,6 +275,7 @@ def recommend(emotion):
     }
 
 # --- 9) 상태/입력/실행 ---
+# (사용자에게 안 보이게 로드)
 model, tokenizer, device, postmap = load_kobert_model()
 
 if "diary_text" not in st.session_state:
@@ -270,10 +288,6 @@ if "music_recs" not in st.session_state:
     st.session_state.music_recs = []
 if "movie_recs" not in st.session_state:
     st.session_state.movie_recs = []
-if "recent_music_ids" not in st.session_state:
-    st.session_state.recent_music_ids = []
-if "recent_movie_ids" not in st.session_state:
-    st.session_state.recent_movie_ids = []
 
 # --- 10) 버튼 콜백 ---
 def handle_analyze_click():
@@ -321,7 +335,7 @@ if st.session_state.final_emotion:
     st.divider()
     st.subheader(f"'{emo}' 감정을 위한 오늘의 Moodiary 추천")
 
-    music_ids = st.session_state.music_recs
+    music_items = st.session_state.music_recs
     movie_items = st.session_state.movie_recs
 
     for i in range(3):
@@ -332,14 +346,17 @@ if st.session_state.final_emotion:
                 st.markdown("#### 🎵 이런 음악도 들어보세요?")
                 st.button("🔄 다른 음악 추천", on_click=refresh_music, use_container_width=True)
             
-            if i < len(music_ids):
-                tid = music_ids[i]
-                # ⭐️ ID 문자열인지 확인
-                if isinstance(tid, str) and len(tid) > 5: 
-                    embed_url = f"https://open.spotify.com/embed/track/{tid}?utm_source=generator&theme=0"
+            if i < len(music_items):
+                it = music_items[i]
+                # ⭐️⭐️⭐️ 딕셔너리에서 ID를 꺼내오는 로직으로 복구 ⭐️⭐️⭐️
+                if isinstance(it, dict) and it.get("id"):
+                    track_id = it.get("id")
+                    embed_url = f"https://open.spotify.com/embed/track/{track_id}?utm_source=generator&theme=0"
                     components.iframe(embed_url, height=152)
+                elif isinstance(it, dict):
+                    st.error(it.get("title", "알 수 없는 음악 오류"))
                 else:
-                    st.write(f"- {tid}") # 오류 메시지일 경우
+                    st.error(f"- {it}")
             
         with col_movie:
             if i == 0: 
@@ -359,7 +376,7 @@ if st.session_state.final_emotion:
                     line = f"##### **{title} ({year})**\n⭐ {rating:.1f}\n\n*{overview}*"
                     st.markdown(line)
                 elif isinstance(it, dict):
-                    st.error(it.get("text", "영화 오류"))
+                    st.error(it.get("text", "알 수 없는 영화 추천 오류"))
                 else:
                     st.error(f"- {it}")
 
