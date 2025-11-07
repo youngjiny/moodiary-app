@@ -64,6 +64,7 @@ def load_kobert_model():
         return model, tokenizer, device, post_processing_map
     except Exception as e:
         st.error("🚨 AI 모델을 불러오는 데 실패했습니다.")
+        st.exception(e)
         return None, None, None, None
 
 # --- 4) 감정 분석 ---
@@ -103,7 +104,7 @@ def get_spotify_client():
     except Exception:
         return None
 
-# --- 6) Spotify 추천 (2010년 이후로 변경) ---
+# --- 6) Spotify 추천 (동요 제외 + 트렌디한 키워드) ---
 def recommend_music(emotion):
     sp = get_spotify_client()
     if not sp:
@@ -112,16 +113,18 @@ def recommend_music(emotion):
     def is_korean(txt):
         return isinstance(txt, str) and any('가' <= ch <= '힣' for ch in txt)
 
+    # ⭐️⭐️⭐️ 동요가 나오지 않도록 구체적이고 트렌디한 장르 위주로 변경 ⭐️⭐️⭐️
     KR_KEYWORDS = {
-        "행복": ["여행", "행복", "케이팝 최신", "여름 노래"],
-        "슬픔": ["발라드 최신", "이별 노래", "감성 케이팝", "K-ballad"],
-        "분노": ["인기 밴드", "팝송", "스트레스", "재즈"],
-        "힘듦": ["위로 노래", "힐링 케이팝", "잔잔한 팝"],
-        "놀람": ["파티 케이팝", "EDM 케이팝", "페스티벌 음악"],
+        "행복": ["K-Pop Dance", "Trendy K-Pop", "Driving Music K-Pop", "Refreshing K-Pop"],
+        "슬픔": ["Korean Emotional Ballad", "K-Drama OST Sad", "Dawn Sensibility K-Pop"],
+        "분노": ["K-Rock", "Powerful K-Pop", "Korean Hip-Hop", "Hard Rock"],
+        "힘듦": ["Chill K-Pop", "Korean Acoustic Indie", "Comforting K-Pop"],
+        "놀람": ["K-Pop EDM", "Festival K-Pop", "Upbeat K-Pop"],
     }
 
-    # ⭐️⭐️⭐️ 2010년 이후로 변경 (year:2010-2025) ⭐️⭐️⭐️
-    query = random.choice(KR_KEYWORDS.get(emotion, ["케이팝 최신"])) + " year:2010-2025"
+    # ⭐️⭐️⭐️ NOT 연산자를 추가하여 키즈/동요를 명시적으로 제외 ⭐️⭐️⭐️
+    query = random.choice(KR_KEYWORDS.get(emotion, ["Trendy K-Pop"])) + " year:2010-2025 NOT children NOT nursery"
+    last_exception = None 
 
     try:
         res = sp.search(q=query, type="track", limit=50, market="KR")
@@ -132,7 +135,6 @@ def recommend_music(emotion):
             name = t.get("name")
             artists = t.get("artists") or []
             artist = artists[0].get("name") if artists else "Unknown"
-            # (여기서도 한 번 더 연도 체크를 할 수 있지만, 검색 쿼리가 더 확실합니다)
             if track_id and name and (is_korean(name) or is_korean(artist)):
                 valid.append({"title": name, "artist": artist, "id": track_id}) 
 
@@ -159,16 +161,29 @@ def recommend_music(emotion):
                 if len(valid) >= 10: break 
 
         if not valid:
+            # 만약 필터링 때문에 결과가 없으면, 일반 K-Pop으로 재시도
+            top = sp.search(q="K-Pop Hits 2024", type="track", limit=50, market="KR")
+            titems = (top.get("tracks") or {}).get("items") or []
+            for t in titems:
+                track_id = t.get("id")
+                name = t.get("name")
+                artists = t.get("artists") or []
+                artist = artists[0].get("name") if artists else "Unknown"
+                if track_id and name:
+                    valid.append({"title": name, "artist": artist, "id": track_id})
+
+        if not valid:
             return [{"title": "추천 없음", "artist": "Spotify API 문제", "id": None}]
         
         unique_tracks = {t['id']: t for t in valid}.values()
         return random.sample(list(unique_tracks), k=min(3, len(unique_tracks)))
 
     except Exception as e:
-        return [f"Spotify AI 검색 오류: {type(e).__name__}: {e}"]
+        last_exception = e
+        return [f"Spotify AI 검색 오류: {type(last_exception).__name__}: {last_exception}"]
 
 
-# --- 7) TMDB 추천 (평점 8.0+, 2020년+, 애니 제외) ---
+# --- 7) TMDB 추천 (2000년+, 명작 필터) ---
 def recommend_movies(emotion):
     key = st.secrets.get("tmdb", {}).get("api_key", "")
     if not key:
@@ -198,11 +213,11 @@ def recommend_movies(emotion):
                 "language": "ko-KR",
                 "sort_by": "popularity.desc",
                 "with_genres": g,
-                "without_genres": "16",
+                "without_genres": "16",               # 애니메이션 제외
                 "page": 1,
-                "vote_count.gte": 100,
-                "vote_average.gte": 8.0,
-                "primary_release_date.gte": "2020-01-01"
+                "vote_count.gte": 1000,               # ⭐️ 투표수 1000 이상 (명작 기준 상향)
+                "vote_average.gte": 7.5,              # ⭐️ 평점 7.5 이상
+                "primary_release_date.gte": "2000-01-01" # ⭐️ 2000년 이후
             },
             timeout=10,
         )
@@ -210,7 +225,7 @@ def recommend_movies(emotion):
         results = r.json().get("results", [])
 
         if not results:
-            return [{"text": f"조건(2020년+, 평점 8.0+)에 맞는 [{emotion}] 영화가 없습니다.", "poster": None, "overview": ""}]
+            return [{"text": f"조건(2000년+, 평점 7.5+, 투표 1000+)에 맞는 [{emotion}] 영화가 없습니다.", "poster": None, "overview": ""}]
 
         picks = results if len(results) <= 3 else random.sample(results, 3)
         out = []
@@ -243,9 +258,7 @@ def recommend(emotion):
     }
 
 # --- 9) 상태/입력/실행 ---
-# (사용자에게 안 보이게 로드)
-model, tokenizer, device, postmap = load_kobert_model()
-
+# (시스템 상태 확인 숨김)
 if "diary_text" not in st.session_state:
     st.session_state.diary_text = ""
 if "final_emotion" not in st.session_state:
@@ -256,6 +269,8 @@ if "music_recs" not in st.session_state:
     st.session_state.music_recs = []
 if "movie_recs" not in st.session_state:
     st.session_state.movie_recs = []
+
+model, tokenizer, device, postmap = load_kobert_model()
 
 # --- 10) 버튼 콜백 ---
 def handle_analyze_click():
@@ -285,7 +300,7 @@ def refresh_movies():
         with st.spinner("새로운 영화를 찾고 있어요..."):
             st.session_state.movie_recs = recommend_movies(st.session_state.final_emotion)
 
-# --- 11) 입력 UI (콜백 연결) ---
+# --- 11) 입력 UI ---
 col1, col2 = st.columns([3, 1])
 with col1:
     st.markdown("### 오늘의 일기를 작성해주세요:")
