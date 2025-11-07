@@ -20,7 +20,7 @@ KOBERT_BASE_MODEL = "monologg/kobert"
 KOBERT_SAVED_REPO = "Young-jin/kobert-moodiary-app" 
 TMDB_BASE_URL = "https://api.themoviedb.org/3"
 
-# ⭐️⭐️⭐️ 비상용 TMDB 키 하드코딩 ⭐️⭐️⭐️
+# 비상용 TMDB 키
 EMERGENCY_TMDB_KEY = "8587d6734fd278ecc05dcbe710c29f9c"
 
 st.set_page_config(layout="wide")
@@ -64,7 +64,6 @@ def load_kobert_model():
         return model, tokenizer, device, post_processing_map
     except Exception as e:
         st.error("🚨 AI 모델을 불러오는 데 실패했습니다.")
-        st.exception(e)
         return None, None, None, None
 
 # --- 4) 감정 분석 ---
@@ -104,7 +103,7 @@ def get_spotify_client():
     except Exception:
         return None
 
-# --- 6) Spotify 추천 (키워드 검색 + 404 방어) ---
+# --- 6) Spotify 추천 ---
 def recommend_music(emotion):
     sp = get_spotify_client()
     if not sp:
@@ -114,7 +113,7 @@ def recommend_music(emotion):
         return isinstance(txt, str) and any('가' <= ch <= '힣' for ch in txt)
 
     KR_KEYWORDS = {
-        "행복": ["케이팝 최신", "국내 신나는 노래", "여름 노래", "K-pop happy"],
+        "행복": ["여행", "행복", "케이팝 최신", "여름 노래"],
         "슬픔": ["발라드 최신", "이별 노래", "감성 케이팝", "K-ballad"],
         "분노": ["인기 밴드", "팝송", "스트레스", "재즈"],
         "힘듦": ["위로 노래", "힐링 케이팝", "잔잔한 팝"],
@@ -122,7 +121,6 @@ def recommend_music(emotion):
     }
 
     query = random.choice(KR_KEYWORDS.get(emotion, ["케이팝 최신"])) + " year:2015-2025"
-    last_exception = None 
 
     try:
         res = sp.search(q=query, type="track", limit=50, market="KR")
@@ -145,23 +143,18 @@ def recommend_music(emotion):
                 try:
                     items = (sp.playlist_items(pid, limit=50, market="KR") or {}).get("items") or []
                 except spotipy.exceptions.SpotifyException as se:
-                    if se.http_status == 404:
-                        continue 
-                    else:
-                        last_exception = se 
-                        continue 
+                    if se.http_status == 404: continue 
+                    else: continue 
                 for it in items:
                     tr = (it or {}).get("track") or {}
-                    if not tr:
-                        continue
+                    if not tr: continue
                     track_id = tr.get("id")
                     name = tr.get("name")
                     artists = tr.get("artists") or []
                     artist = artists[0].get("name") if artists else "Unknown"
                     if track_id and name:
                         valid.append({"title": name, "artist": artist, "id": track_id})
-                if len(valid) >= 10:
-                    break 
+                if len(valid) >= 10: break 
 
         if not valid:
             top = sp.search(q="top hits 2024", type="track", limit=50, market="KR")
@@ -181,18 +174,14 @@ def recommend_music(emotion):
         return random.sample(list(unique_tracks), k=min(3, len(unique_tracks)))
 
     except Exception as e:
-        last_exception = e
-        return [f"Spotify AI 검색 오류: {type(last_exception).__name__}: {last_exception}"]
+        return [f"Spotify AI 검색 오류: {type(e).__name__}: {e}"]
 
 
-# --- 7) ⭐️ TMDB 추천 (비상키 사용 + 평점 7.5) ---
+# --- 7) ⭐️ TMDB 추천 (고객 요청 5가지 조건 적용) ---
 def recommend_movies(emotion):
-    # ⭐️⭐️⭐️ 1. Secrets에서 먼저 시도 ⭐️⭐️⭐️
     key = st.secrets.get("tmdb", {}).get("api_key", "")
     if not key:
         key = st.secrets.get("TMDB_API_KEY", "")
-    
-    # ⭐️⭐️⭐️ 2. 실패하면 비상용 하드코딩 키 사용 ⭐️⭐️⭐️
     if not key:
         key = EMERGENCY_TMDB_KEY
 
@@ -202,15 +191,16 @@ def recommend_movies(emotion):
     GENRES = {
         "행복": "35|10749|10751|27",
         "분노": "28|12|35|878",
-        "슬픔": "35|10751|16|14",
-        "힘듦": "35|10751|16|14",
-        "놀람": "35|10751|16|14",
+        "슬픔": "35|10751|14", # (애니메이션 16 제거)
+        "힘듦": "35|10751|14", # (애니메이션 16 제거)
+        "놀람": "35|10751|14", # (애니메이션 16 제거)
     }
     g = GENRES.get(emotion)
     if not g:
         return [{"text": f"[{emotion}]에 대한 장르 맵핑이 없습니다.", "poster": None, "overview": ""}]
 
     try:
+        # ⭐️⭐️⭐️ TMDB API 파라미터 대폭 수정 ⭐️⭐️⭐️
         r = requests.get(
             f"{TMDB_BASE_URL}/discover/movie",
             params={
@@ -218,9 +208,11 @@ def recommend_movies(emotion):
                 "language": "ko-KR",
                 "sort_by": "popularity.desc",
                 "with_genres": g,
+                "without_genres": "16",              # ⭐️ 3. 애니메이션(16) 제외
                 "page": 1,
-                "vote_count.gte": 100,
-                "vote_average.gte": 7.5 
+                "vote_count.gte": 100,               # ⭐️ 5. 투표수 100 이상
+                "vote_average.gte": 8.0,             # ⭐️ 4. 평점 8.0 이상
+                "primary_release_date.gte": "2020-01-01" # ⭐️ 1. 2020년 이후 개봉
             },
             timeout=10,
         )
@@ -228,7 +220,7 @@ def recommend_movies(emotion):
         results = r.json().get("results", [])
 
         if not results:
-            return [{"text": f"[{emotion}] 감정의 평점 7.5 이상 인기 영화를 찾지 못했습니다.", "poster": None, "overview": ""}]
+            return [{"text": f"조건(2020년 이후, 평점 8.0+)에 맞는 [{emotion}] 영화가 없습니다.", "poster": None, "overview": ""}]
 
         picks = results if len(results) <= 3 else random.sample(results, 3)
         out = []
@@ -261,7 +253,9 @@ def recommend(emotion):
     }
 
 # --- 9) 상태/입력/실행 ---
-# ⭐️ (시스템 상태 확인은 이제 사용자에게 안 보이게 삭제했습니다)
+# (사용자에게 안 보이게 로드)
+model, tokenizer, device, postmap = load_kobert_model()
+
 if "diary_text" not in st.session_state:
     st.session_state.diary_text = ""
 if "final_emotion" not in st.session_state:
@@ -273,10 +267,7 @@ if "music_recs" not in st.session_state:
 if "movie_recs" not in st.session_state:
     st.session_state.movie_recs = []
 
-# ⭐️ 모델 로드 (조용히)
-model, tokenizer, device, postmap = load_kobert_model()
-
-# --- 10) 버튼 콜백(Callback) 함수 정의 ---
+# --- 10) 버튼 콜백 ---
 def handle_analyze_click():
     txt = st.session_state.diary_text
     if not txt.strip():
@@ -304,7 +295,7 @@ def refresh_movies():
         with st.spinner("새로운 영화를 찾고 있어요..."):
             st.session_state.movie_recs = recommend_movies(st.session_state.final_emotion)
 
-# --- 11) 입력 UI (콜백 연결) ---
+# --- 11) 입력 UI ---
 col1, col2 = st.columns([3, 1])
 with col1:
     st.markdown("### 오늘의 일기를 작성해주세요:")
@@ -315,7 +306,7 @@ with col2:
     st.write(" "); st.write(" ")
     st.button("🔍 내 하루 감정 분석하기", type="primary", on_click=handle_analyze_click, use_container_width=True)
 
-# --- 12) 결과/추천 출력 (UI 레이아웃 최종) ---
+# --- 12) 결과/추천 출력 ---
 if st.session_state.final_emotion:
     emo = st.session_state.final_emotion
     st.subheader(f"오늘 하루의 핵심 감정은 '{emo}' 입니다.")
@@ -328,7 +319,6 @@ if st.session_state.final_emotion:
     for i in range(3):
         col_music, col_movie = st.columns(2)
 
-        # --- 음악 컬럼 ---
         with col_music:
             if i == 0: 
                 st.markdown("#### 🎵 이런 음악도 들어보세요?")
@@ -346,7 +336,6 @@ if st.session_state.final_emotion:
                 else:
                     st.write(f"- {it}")
             
-        # --- 영화 컬럼 ---
         with col_movie:
             if i == 0: 
                 st.markdown("#### 🎬 이런 영화도 추천해요?")
@@ -358,15 +347,12 @@ if st.session_state.final_emotion:
                     poster = it.get("poster")
                     if poster:
                         st.image(poster, width=160)
-                    
                     title = it.get("title", "제목없음")
                     year = it.get("year", "N/A")
                     rating = float(it.get("rating", 0.0))
                     overview = it.get("overview", "") 
-                    
                     line = f"##### **{title} ({year})**\n⭐ {rating:.1f}\n\n*{overview}*"
                     st.markdown(line)
-                
                 elif isinstance(it, dict):
                     st.error(it.get("text", "알 수 없는 영화 추천 오류"))
                 else:
