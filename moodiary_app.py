@@ -13,7 +13,7 @@ from streamlit_calendar import calendar
 import gspread
 from google.oauth2.service_account import Credentials
 import pandas as pd
-import altair as alt # Altair 차트 라이브러리
+# ⭐️ [수정] Altair 임포트 삭제
 
 # (선택) Spotify SDK
 try:
@@ -333,7 +333,7 @@ def dashboard_page():
                  )
         st.write("")
 
-    # ⭐️⭐️⭐️ [핵심 수정] '이달의 통계' 탭: Altair 차트 로직 수정 ⭐️⭐️⭐️
+    # ⭐️⭐️⭐️ [핵심 수정] '이달의 통계' 탭: st.bar_chart로 변경 ⭐️⭐️⭐️
     with tab2:
         today = datetime.now(KST)
         st.subheader(f"{today.month}월의 감정 통계")
@@ -349,51 +349,23 @@ def dashboard_page():
         df = pd.DataFrame(month_emotions, columns=['emotion'])
         emotion_counts = df['emotion'].value_counts().reindex(EMOTION_META.keys(), fill_value=0)
             
-        # 2. Altair 차트용 데이터프레임으로 변환
+        # 2. ⭐️ [수정] st.bar_chart 용 데이터프레임으로 변환
         chart_data = emotion_counts.reset_index()
         chart_data.columns = ['emotion', 'count']
-
-        # 3. ⭐️ [수정] 차트에 사용할 *헥스(Hex)* 색상 코드 정의
-        chart_colors = {
-            "행복": "#FFD700",
-            "슬픔": "#1E90FF",
-            "분노": "#FF0000",
-            "힘듦": "#808080",
-            "놀람": "#8A2BE2",
-            "중립": "#363636"
-        }
         
-        domain = list(chart_colors.keys())
-        range_ = list(chart_colors.values())
+        # 3. ⭐️ [수정] 차트에 사용할 "옅은 색상"을 'color' 열로 추가
+        chart_data['color'] = chart_data['emotion'].map(lambda e: EMOTION_META[e]['color'])
 
-        # 4. Altair 차트 생성
-        chart = alt.Chart(chart_data).mark_bar(
-            cornerRadius=5, 
-            # ⭐️ [수정] '옅은' 효과를 여기서 Opacity로 줌
-            opacity=0.6 
-        ).encode(
-            # X축: 감정 (글자 가로 표시)
-            x=alt.X('emotion', sort=domain, title='감정', axis=alt.Axis(labelAngle=0)),
-            
-            # ⭐️ [수정] Y축 0 고정 (zero=True) 및 정수 단위(tickMinStep=1)
-            y=alt.Y('count:Q', title='횟수', 
-                    axis=alt.Axis(format='d', tickMinStep=1), 
-                    scale=alt.Scale(zero=True)), # zero=True가 음수 표시를 막음
-            
-            # ⭐️ [수정] 색상: Hex 코드로 매핑
-            color=alt.Color('emotion', 
-                            legend=None, 
-                            scale=alt.Scale(domain=domain, range=range_)),
-            
-            tooltip=['emotion', 'count']
-        ).properties(
-            title=f'{today.month}월의 감정 분포' 
-        ).interactive() 
-
-        # 5. 차트 표시
-        st.altair_chart(chart, use_container_width=True)
+        # 4. ⭐️ [수정] st.bar_chart로 차트 생성 (x, y, color 지정)
+        st.bar_chart(
+            chart_data,
+            x='emotion',
+            y='count',
+            color='color', # ⭐️ 이 부분이 색상을 적용합니다.
+            use_container_width=True
+        )
         
-        # 6. 텍스트로 횟수 표시
+        # 5. 텍스트로 횟수 표시
         st.write("---")
         st.write("감정별 횟수:")
         for emo, count in emotion_counts.items():
