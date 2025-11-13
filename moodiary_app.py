@@ -5,365 +5,369 @@ import requests
 import torch
 from transformers import AutoModelForSequenceClassification, AutoTokenizer, AutoConfig
 import time 
-import streamlit.components.v1 as components
-import json
-import os
-from datetime import datetime
-from streamlit_calendar import calendar
-import gspread
-from google.oauth2.service_account import Credentials
+import streamlit.components.v1 as components 
 
 # (선택) Spotify SDK
 try:
     import spotipy
     from spotipy.oauth2 import SpotifyClientCredentials
-    SPOTIPY_AVAILABLE = True
-except ImportError:
+except Exception:
     spotipy = None
     SpotifyClientCredentials = None
-    SPOTIPY_AVAILABLE = False # ⭐️ 라이브러리 설치 실패를 기억
 
 # --- 2) 기본 설정 ---
 KOBERT_BASE_MODEL = "monologg/kobert"
 KOBERT_SAVED_REPO = "Young-jin/kobert-moodiary-app" 
 TMDB_BASE_URL = "https://api.themoviedb.org/3"
-GSHEET_DB_NAME = "moodiary_db" 
 
 # 비상용 TMDB 키
 EMERGENCY_TMDB_KEY = "8587d6734fd278ecc05dcbe710c29f9c"
 
-# 감정별 테마
-EMOTION_META = {
-    "행복": {"color": "#FFD700", "emoji": "😆", "desc": "최고의 하루!"},
-    "슬픔": {"color": "#1E90FF", "emoji": "😭", "desc": "토닥토닥, 힘내요."},
-    "분노": {"color": "#FF4500", "emoji": "🤬", "desc": "워워, 진정해요."},
-    "힘듦": {"color": "#808080", "emoji": "🤯", "desc": "휴식이 필요해."},
-    "놀람": {"color": "#8A2BE2", "emoji": "😱", "desc": "깜짝 놀랐군요!"},
-    "중립": {"color": "#A9A9A9", "emoji": "😐", "desc": "평온한 하루."}
-}
-
 st.set_page_config(layout="wide", page_title="MOODIARY")
 
-# =========================================
-# 🔐 3) 영구 데이터 관리 (Google Sheets)
-# =========================================
-@st.cache_resource
-def get_gsheets_client():
-    try:
-        creds = st.secrets["connections"]["gsheets"]
-        scope = ['https://www.googleapis.com/auth/spreadsheets', 'https://www.googleapis.com/auth/drive']
-        credentials = Credentials.from_service_account_info(creds, scopes=scope)
-        return gspread.authorize(credentials)
-    except Exception:
-        return None
-
-def init_db():
-    client = get_gsheets_client()
-    if not client: return None
-    try:
-        sh = client.open(GSHEET_DB_NAME)
-        sh.worksheet("users")
-        sh.worksheet("diaries")
-        return sh
-    except:
-        return None 
-
-def get_all_users(sh):
-    if not sh: return {}
-    try:
-        rows = sh.worksheet("users").get_all_records()
-        return {row['username']: str(row['password']) for row in rows}
-    except: return {}
-
-def add_user(sh, username, password):
-    if not sh: return False
-    try:
-        sh.worksheet("users").append_row([username, password])
-        return True
-    except: return False
-
-def get_user_diaries(sh, username):
-    if not sh: return {}
-    try:
-        rows = sh.worksheet("diaries").get_all_records()
-        user_diaries = {}
-        for row in rows:
-            if row['username'] == username:
-                user_diaries[row['date']] = {"emotion": row['emotion'], "text": row['text']}
-        return user_diaries
-    except: return {}
-
-def add_diary(sh, username, date, emotion, text):
-    if not sh: return False
-    try:
-        sh.worksheet("diaries").append_row([username, date, emotion, text])
-        return True
-    except: return False
-
-# =========================================
-# 🧠 4) AI 및 추천 로직
-# =========================================
+# --- 3) KoBERT 모델 로드 ---
 @st.cache_resource
 def load_kobert_model():
     try:
-        CORRECT_ID_TO_LABEL = {0: '분노', 1: '기쁨', 2: '불안', 3: '당황', 4: '슬픔', 5: '상처'}
-        config = AutoConfig.from_pretrained(KOBERT_BASE_MODEL, trust_remote_code=True, num_labels=6, id2label=CORRECT_ID_TO_LABEL, label2id={l: i for i, l in CORRECT_ID_TO_LABEL.items()})
-        tokenizer = AutoTokenizer.from_pretrained(KOBERT_BASE_MODEL, trust_remote_code=True)
-        model = AutoModelForSequenceClassification.from_pretrained(KOBERT_SAVED_REPO, config=config, trust_remote_code=True, ignore_mismatched_sizes=False)
+        CORRECT_ID_TO_LABEL = {
+            0: '분노', 1: '기쁨', 2: '불안',
+            3: '당황', 4: '슬픔', 5: '상처'
+        }
+        config = AutoConfig.from_pretrained(
+            KOBERT_BASE_MODEL,
+            trust_remote_code=True,
+            num_labels=6,
+            id2label=CORRECT_ID_TO_LABEL,
+            label2id={label: idx for idx, label in CORRECT_ID_TO_LABEL.items()}
+        )
+        tokenizer = AutoTokenizer.from_pretrained(
+            KOBERT_BASE_MODEL,
+            trust_remote_code=True
+        )
+        model = AutoModelForSequenceClassification.from_pretrained(
+            KOBERT_SAVED_REPO,
+            config=config,
+            trust_remote_code=True,
+            ignore_mismatched_sizes=False
+        )
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         model.to(device)
-        post_processing_map = getattr(model.config, 'post_processing_map', None) or {'기쁨': '행복', '슬픔': '슬픔', '상처': '슬픔', '불안': '힘듦', '당황': '놀람', '분노': '분노'}
-        return model, tokenizer, device, post_processing_map
-    except: return None, None, None, None
 
+        post_processing_map = getattr(model.config, 'post_processing_map', None)
+        if post_processing_map is None:
+            post_processing_map = {
+                '기쁨': '행복', '슬픔': '슬픔', '상처': '슬픔',
+                '불안': '힘듦', '당황': '놀람', '분노': '분노'
+            }
+
+        return model, tokenizer, device, post_processing_map
+    except Exception as e:
+        st.error("🚨 AI 모델을 불러오는 데 실패했습니다.")
+        return None, None, None, None
+
+# --- 4) 감정 분석 ---
 def analyze_diary_kobert(text, model, tokenizer, device, post_processing_map):
-    if not text: return None, 0.0
+    if not text:
+        return None, 0.0
+
     enc = tokenizer(text, truncation=True, padding=True, max_length=128, return_tensors="pt")
-    for k in enc: enc[k] = enc[k].to(device)
-    with torch.no_grad(): logits = model(**enc).logits
+    for k in enc:
+        enc[k] = enc[k].to(device)
+
+    with torch.no_grad():
+        logits = model(**enc).logits
+
     probs = torch.softmax(logits, dim=1)[0]
     pred_id = int(probs.argmax().cpu().item())
     score = float(probs[pred_id].cpu().item())
+
     id2label = getattr(model.config, "id2label", {})
     original = id2label.get(pred_id) or id2label.get(str(pred_id)) or "중립"
-    return post_processing_map.get(original, original), score
+    final_emotion = post_processing_map.get(original, original)
+    return final_emotion, score
 
+# --- 5) Spotify 클라이언트 ---
 @st.cache_resource
 def get_spotify_client():
-    # ⭐️ 1. 라이브러리 설치 확인
-    if not SPOTIPY_AVAILABLE:
-        return "Spotipy 라이브러리가 설치되지 않았습니다. (requirements.txt 확인)"
-    
-    # ⭐️ 2. Secrets 키 확인
-    try:
-        creds = st.secrets["spotify"]
-        cid = creds["client_id"]
-        secret = creds["client_secret"]
-    except KeyError:
-        return "Secrets에 [spotify] 섹션 또는 키가 없습니다."
-    except Exception as e:
-         return f"Secrets 읽기 오류: {e}"
-
+    if spotipy is None or SpotifyClientCredentials is None:
+        return None
+    creds = st.secrets.get("spotify", {})
+    cid = creds.get("client_id")
+    secret = creds.get("client_secret")
     if not cid or not secret:
-        return "Spotify client_id 또는 client_secret이 비어있습니다."
-        
-    # ⭐️ 3. Spotify 로그인 시도
+        return None
     try:
         manager = SpotifyClientCredentials(client_id=cid, client_secret=secret)
-        sp = spotipy.Spotify(client_credentials_manager=manager, retries=3, backoff_factor=0.3)
-        sp.search(q="test", limit=1) # ⭐️ 로그인 테스트
-        return sp # ⭐️ 성공 시 클라이언트 객체 반환
-    except spotipy.exceptions.SpotifyException as e:
-        return f"Spotify 로그인 실패 (키 값 오류?): {e}"
-    except Exception as e:
-        return f"Spotify 클라이언트 생성 실패: {e}"
+        return spotipy.Spotify(client_credentials_manager=manager, retries=3, status_retries=3, backoff_factor=0.3)
+    except Exception:
+        return None
 
-# ⭐️ Spotify 추천 로직 (오류 메시지 표시)
+# --- 6) Spotify 추천 (market="KR" 복구) ---
 def recommend_music(emotion):
     sp = get_spotify_client()
-    
-    # ⭐️ sp가 spotipy.Spotify 객체가 아니라면 (즉, 오류 메시지라면)
-    if not isinstance(sp, spotipy.Spotify):
-        return [{"error": sp}] # ⭐️ get_spotify_client에서 받은 오류 메시지를 반환
-    
-    # (이하는 기존 로직과 동일)
-    KR_KEYWORDS = {
-        "행복": ["여행", "행복", "케이팝 최신", "여름 노래"],
-        "슬픔": ["발라드 최신", "이별 노래", "감성 케이팝", "K-ballad"],
-        "분노": ["인기 밴드", "팝송", "스트레스", "재즈"],
-        "힘듦": ["위로 노래", "힐링 케이팝", "잔잔한 팝"],
-        "놀람": ["파티 케이팝", "EDM 케이팝", "페스티벌 음악"],
+    if not sp:
+        return ["Spotify 연결 실패 (Secrets 확인 필요)"]
+
+    # 1. 한/미/일 키워드
+    SEARCH_KEYWORDS = {
+        "행복": ["K-Pop Dance", "J-Pop Happy Hits", "American Pop Upbeat"],
+        "슬픔": ["K-Pop Ballad", "J-Pop Sad", "US Pop Sad Songs"],
+        "분노": ["K-Rock", "J-Rock Anthems", "American Hard Rock"],
+        "힘듦": ["K-Indie Healing", "J-Pop Chill", "US Acoustic Pop"],
+        "놀람": ["K-Pop EDM", "J-EDM Party", "US Festival EDM"],
     }
-    query = random.choice(KR_KEYWORDS.get(emotion, ["케이팝"])) + " year:2010-2025 NOT children"
     
+    base_query = random.choice(SEARCH_KEYWORDS.get(emotion, ["K-Pop"]))
+    # ⭐️ 노키즈 필터
+    query = f"{base_query} year:2010-2025 NOT children NOT nursery NOT 동요 NOT 키즈 NOT 어린이"
+
     try:
-        res = sp.search(q=query, type="track", limit=20)
+        # ⭐️⭐️⭐️ market="KR" 복구 ⭐️⭐️⭐️
+        res = sp.search(q=query, type="track", limit=50, market="KR")
         tracks = (res.get("tracks") or {}).get("items") or []
-        valid = []
+        
+        valid_candidates = []
         for t in tracks:
-            if t.get('id') and t.get('name'):
-                 valid.append({"id": t['id'], "title": t['name']})
-        if not valid: return [{"error": "추천 곡을 찾지 못했습니다."}]
-        seen = set(); unique = []
-        for v in valid:
-             if v['id'] not in seen: unique.append(v); seen.add(v['id'])
-        return random.sample(unique, k=min(3, len(unique)))
-    except Exception as e: return [{"error": f"Spotify 오류: {e}"}]
+            tid = t.get("id")
+            # ⭐️ 중복 방지 확인
+            if tid and tid not in st.session_state.recent_music_ids:
+                 # ⭐️ ID와 함께 제목/아티스트도 같이 저장 (UI 표시용)
+                name = t.get("name")
+                artists = t.get("artists") or []
+                artist = artists[0].get("name") if artists else "Unknown"
+                if name:
+                    valid_candidates.append({"title": name, "artist": artist, "id": tid})
 
+        if not valid_candidates:
+             # 검색 결과가 없으면 기록 초기화 후 한 번 더 기회 제공
+             st.session_state.recent_music_ids = []
+             return ["새로운 곡을 찾지 못했습니다. 다시 눌러주세요."]
+
+        # 최대 3개 선택
+        final_picks = random.sample(valid_candidates, k=min(3, len(valid_candidates)))
+        
+        # 기록 업데이트
+        for pick in final_picks:
+            st.session_state.recent_music_ids.append(pick["id"])
+        if len(st.session_state.recent_music_ids) > 60:
+             st.session_state.recent_music_ids = st.session_state.recent_music_ids[-60:]
+
+        return final_picks # ⭐️ ID, Title, Artist가 담긴 딕셔너리 리스트 반환
+
+    except Exception as e:
+        return [f"Spotify 오류: {e}"]
+
+
+# --- 7) TMDB 추천 (2000년+, 평점 7.5+, 투표 1000+, 중복 방지) ---
 def recommend_movies(emotion):
-    key = st.secrets.get("tmdb", {}).get("api_key") or st.secrets.get("TMDB_API_KEY") or EMERGENCY_TMDB_KEY
-    if not key: return [{"text": "TMDB 연결 실패", "poster": None}]
-    GENRES = {"행복": "35|10749|10751|27", "분노": "28|12|35|878", "슬픔": "35|10751|14", "힘듦": "35|10751|14", "놀람": "35|10751|14"}
+    key = st.secrets.get("tmdb", {}).get("api_key", "")
+    if not key:
+        key = st.secrets.get("TMDB_API_KEY", "")
+    if not key:
+        key = EMERGENCY_TMDB_KEY
+
+    if not key:
+        return [{"text": "TMDB 연결 실패", "poster": None, "overview": ""}]
+
+    GENRES = {
+        "행복": "35|10749|10751|27",
+        "분노": "28|12|35|878",
+        "슬픔": "35|10751|14",
+        "힘듦": "35|10751|14",
+        "놀람": "35|10751|14",
+    }
+    g = GENRES.get(emotion)
+    if not g:
+        return [{"text": f"[{emotion}] 장르 매핑 오류", "poster": None, "overview": ""}]
+
     try:
-        r = requests.get(f"{TMDB_BASE_URL}/discover/movie", params={
-            "api_key": key, "language": "ko-KR", "sort_by": "popularity.desc", "with_genres": GENRES.get(emotion), "without_genres": "16",
-            "page": random.randint(1, 5), "vote_count.gte": 1000, "vote_average.gte": 7.5, "primary_release_date.gte": "2000-01-01"
-        }, timeout=5)
-        r.raise_for_status(); results = r.json().get("results", [])
-        if not results: return [{"text": "조건에 맞는 영화가 없습니다.", "poster": None}]
-        picks = random.sample(results, min(3, len(results)))
-        return [{"title": m.get("title"), "year": (m.get("release_date") or "")[:4], "rating": m.get("vote_average", 0.0), "overview": m.get("overview", ""), "poster": f"https://image.tmdb.org/t/p/w500{m['poster_path']}" if m.get("poster_path") else None} for m in picks]
-    except Exception as e: return [{"text": f"TMDb 오류: {e}", "poster": None}]
-
-# =========================================
-# 🖥️ 5) 화면 구성
-# =========================================
-if "logged_in" not in st.session_state: st.session_state.logged_in = False
-if "page" not in st.session_state: st.session_state.page = "login"
-
-def login_page():
-    st.title("MOODIARY 💖")
-    tab1, tab2 = st.tabs(["🔑 로그인", "📝 회원가입"])
-    sh = init_db()
-    if sh is None: st.error("데이터베이스 연결 실패. Secrets 설정을 확인하세요."); return
-
-    with tab1:
-        lid = st.text_input("아이디", key="lid")
-        lpw = st.text_input("비밀번호", type="password", key="lpw")
-        if st.button("로그인", width='stretch'):
-            users = get_all_users(sh)
-            if lid in users and str(users[lid]) == str(lpw):
-                st.session_state.logged_in = True
-                st.session_state.username = lid
-                st.session_state.page = "dashboard"
-                st.rerun()
-            else: st.error("정보가 일치하지 않습니다.")
-    with tab2:
-        nid = st.text_input("새 아이디", key="nid")
-        npw = st.text_input("새 비밀번호 (4자리)", type="password", key="npw", max_chars=4)
-        if st.button("가입하기", width='stretch'):
-            users = get_all_users(sh)
-            if nid in users: st.error("이미 있는 아이디입니다.")
-            elif len(nid)<1 or len(npw)!=4: st.error("입력을 확인해주세요.")
-            else:
-                if add_user(sh, nid, npw): st.success("가입 성공! 로그인해주세요.")
-                else: st.error("가입 실패 (DB 오류)")
-
-def dashboard_page():
-    st.title(f"{st.session_state.username}님의 감정 달력 📅")
-    
-    legend_cols = st.columns(6)
-    for i, (emo, meta) in enumerate(EMOTION_META.items()):
-        legend_cols[i].markdown(f"<span style='color:{meta['color']}; font-size: 1.2em;'>●</span> {emo}", unsafe_allow_html=True)
-    st.divider()
-
-    sh = init_db()
-    my_diaries = get_user_diaries(sh, st.session_state.username)
-    events = []
-    for date_str, data in my_diaries.items():
-        emo = data.get("emotion", "중립")
-        meta = EMOTION_META.get(emo, EMOTION_META["중립"])
-        events.append({"title": meta["emoji"], "start": date_str, "display": "background", "backgroundColor": meta["color"], "borderColor": meta["color"]})
-        events.append({"title": meta["emoji"], "start": date_str, "allDay": True, "backgroundColor": "transparent", "borderColor": "transparent", "textColor": "#000000"})
-
-    calendar(events=events, options={"headerToolbar": {"left": "prev,next today", "center": "title", "right": ""}, "initialView": "dayGridMonth"}, 
-             custom_css=".fc-event-title { font-size: 2em !important; text-align: center; } .fc-bg-event { opacity: 0.6; }")
-    st.write("")
-
-    today_str = datetime.now().strftime("%Y-%m-%d")
-    today_diary_exists = today_str in my_diaries
-
-    if today_diary_exists:
-        st.info(f"오늘({today_str})의 일기({my_diaries[today_str]['emotion']} {EMOTION_META[my_diaries[today_str]['emotion']]['emoji']})가 이미 작성되었습니다.")
+        # 페이지 랜덤화 (중복 방지)
+        random_page = random.randint(1, 5)
         
-        col1, col2 = st.columns(2)
-        with col1:
-            if st.button("✏️ 오늘 일기 수정/확인하기", width='stretch'):
-                st.session_state.page = "write"
-                st.session_state.diary_input = my_diaries[today_str]['text']
-                st.rerun()
-        with col2:
-            def handle_show_recs():
-                today_emo = my_diaries[today_str]['emotion']
-                st.session_state.final_emotion = today_emo
-                st.session_state.music_recs = recommend_music(today_emo)
-                st.session_state.movie_recs = recommend_movies(today_emo)
-                st.session_state.page = "result"
-            if st.button("🎵🎬 오늘의 추천 바로 보기", type="primary", width='stretch'):
-                handle_show_recs()
-                st.rerun()
-    else:
-        if st.button("✏️ 오늘의 일기 쓰러 가기", type="primary", width='stretch'):
-            st.session_state.page = "write"
-            st.session_state.diary_input = "" 
-            st.rerun()
+        r = requests.get(
+            f"{TMDB_BASE_URL}/discover/movie",
+            params={
+                "api_key": key,
+                "language": "ko-KR",
+                "sort_by": "popularity.desc",
+                "with_genres": g,
+                "without_genres": "16",      
+                "page": random_page,
+                "vote_count.gte": 1000,      
+                "vote_average.gte": 7.5,     
+                "primary_release_date.gte": "2000-01-01" 
+            },
+            timeout=10,
+        )
+        r.raise_for_status()
+        results = r.json().get("results", [])
 
-def result_page():
-    emo = st.session_state.final_emotion
-    meta = EMOTION_META.get(emo, EMOTION_META["중립"])
-    st.markdown(f"<h2 style='text-align: center; color: {meta['color']};'>{meta['emoji']} 오늘의 감정: {emo}</h2>", unsafe_allow_html=True)
-    st.markdown(f"<h4 style='text-align: center;'>{meta['desc']}</h4>", unsafe_allow_html=True)
-    
-    if st.button("⬅️ 달력으로 돌아가기"):
-        st.session_state.page = "dashboard"
-        st.rerun()
-    st.divider()
+        if not results:
+             r = requests.get(
+                f"{TMDB_BASE_URL}/discover/movie",
+                params={
+                    "api_key": key, "language": "ko-KR", "sort_by": "popularity.desc",
+                    "with_genres": g, "without_genres": "16", "page": 1,
+                    "vote_count.gte": 1000, "vote_average.gte": 7.5,
+                    "primary_release_date.gte": "2000-01-01"
+                },
+                timeout=10,
+             )
+             r.raise_for_status()
+             results = r.json().get("results", [])
+             if not results:
+                 return [{"text": f"조건에 맞는 명작 영화가 부족합니다.", "poster": None, "overview": ""}]
 
-    def refresh_music(): st.session_state.music_recs = recommend_music(emo)
-    def refresh_movies(): st.session_state.movie_recs = recommend_movies(emo)
+        valid_candidates = []
+        for m in results:
+            mid = m.get("id")
+            if mid and mid not in st.session_state.recent_movie_ids:
+                title = m.get("title", "제목없음")
+                year = (m.get("release_date") or "")[:4] or "N/A"
+                rating = m.get("vote_average", 0.0)
+                poster = f"https://image.tmdb.org/t/p/w500{m['poster_path']}" if m.get("poster_path") else None
+                overview = m.get("overview", "") or "줄거리 정보가 없습니다."
+                
+                valid_candidates.append({
+                    "id": mid,
+                    "poster": poster,
+                    "title": title,
+                    "year": year,
+                    "rating": rating,
+                    "overview": overview 
+                })
 
-    c1, c2 = st.columns(2)
-    with c1:
-        st.markdown("#### 🎵 추천 음악")
-        st.button("🔄 다른 음악", on_click=refresh_music, key="rm_btn", width='stretch')
-        for item in st.session_state.music_recs:
-            if item.get('id'):
-                components.iframe(f"https://open.spotify.com/embed/track/{item['id']}?utm_source=generator", height=80)
-            else: st.error(item.get("error", "로딩 실패")) # ⭐️ 오류 메시지 표시
-    with c2:
-        st.markdown("#### 🎬 추천 영화")
-        st.button("🔄 다른 영화", on_click=refresh_movies, key="rv_btn", width='stretch')
-        for item in st.session_state.movie_recs:
-            if item.get('poster'):
-                ic, tc = st.columns([1, 2])
-                ic.image(item['poster'], use_container_width=True)
-                tc.markdown(f"**{item['title']} ({item['year']})**\n⭐ {item['rating']:.1f}\n\n*{item.get('overview','')[:100]}...*")
-            else: st.error(item.get("text", "로딩 실패")) # ⭐️ 오류 메시지 표시
+        if not valid_candidates:
+             st.session_state.recent_movie_ids = [] 
+             return [{"text": "새로운 영화를 찾을 수 없습니다. 다시 시도해주세요.", "poster": None, "overview": ""}]
 
-def write_page():
-    st.title("오늘의 이야기 📝")
-    if st.button("⬅️ 뒤로 가기"):
-        st.session_state.page = "dashboard"
-        st.rerun()
+        final_picks = random.sample(valid_candidates, k=min(3, len(valid_candidates)))
 
-    model, tokenizer, device, postmap = load_kobert_model()
-    if not model: st.error("AI 모델 로드 중..."); return
+        for pick in final_picks:
+            st.session_state.recent_movie_ids.append(pick["id"])
+        if len(st.session_state.recent_movie_ids) > 60:
+            st.session_state.recent_movie_ids = st.session_state.recent_movie_ids[-60:]
 
-    if "diary_input" not in st.session_state: st.session_state.diary_input = ""
-    txt = st.text_area("오늘 하루는 어땠나요?", value=st.session_state.diary_input, height=300, key="diary_editor")
-    
-    if st.button("🔍 감정 분석하고 저장하기", type="primary", width='stretch'):
-        if not txt.strip(): st.warning("내용을 입력해주세요."); return
+        return final_picks
+
+    except Exception as e:
+        return [{"text": f"TMDb 오류: {type(e).__name__}: {e}", "poster": None, "overview": ""}]
+
+
+# --- 8) 통합 추천 ---
+def recommend(emotion):
+    return {
+        "음악": recommend_music(emotion),
+        "영화": recommend_movies(emotion),
+    }
+
+# --- 9) 상태/입력/실행 ---
+model, tokenizer, device, postmap = load_kobert_model()
+
+if "diary_text" not in st.session_state:
+    st.session_state.diary_text = ""
+if "final_emotion" not in st.session_state:
+    st.session_state.final_emotion = None
+if "confidence" not in st.session_state:
+    st.session_state.confidence = 0.0
+if "music_recs" not in st.session_state:
+    st.session_state.music_recs = []
+if "movie_recs" not in st.session_state:
+    st.session_state.movie_recs = []
+if "recent_music_ids" not in st.session_state:
+    st.session_state.recent_music_ids = []
+if "recent_movie_ids" not in st.session_state:
+    st.session_state.recent_movie_ids = []
+
+# --- 10) 버튼 콜백 ---
+def handle_analyze_click():
+    txt = st.session_state.diary_text
+    if not txt.strip():
+        st.warning("일기를 입력해주세요.")
+        return
+    if model is None:
+        st.error("AI 모델 로드에 실패했습니다. 잠시 후 다시 시도해주세요.")
+        return
+    with st.spinner("AI가 분석 중입니다..."):
+        emo, sc = analyze_diary_kobert(txt, model, tokenizer, device, postmap)
+        st.session_state.final_emotion = emo
+        st.session_state.confidence = sc
         
-        with st.spinner("분석 및 저장 중..."):
-            emo, sc = analyze_diary_kobert(txt, model, tokenizer, device, postmap)
-            st.session_state.final_emotion = emo
+        with st.spinner("추천을 불러오는 중..."):
             st.session_state.music_recs = recommend_music(emo)
             st.session_state.movie_recs = recommend_movies(emo)
+
+def refresh_music():
+    if st.session_state.final_emotion:
+        with st.spinner("새로운 음악을 찾고 있어요..."):
+            st.session_state.music_recs = recommend_music(st.session_state.final_emotion)
+
+def refresh_movies():
+    if st.session_state.final_emotion:
+        with st.spinner("새로운 영화를 찾고 있어요..."):
+            st.session_state.movie_recs = recommend_movies(st.session_state.final_emotion)
+
+# --- 11) 입력 UI ---
+col1, col2 = st.columns([3, 1])
+with col1:
+    st.markdown("### 오늘의 일기를 작성해주세요:")
+    st.text_area(" ", key="diary_text", height=230, label_visibility="collapsed")
+
+with col2:
+    st.write(" "); st.write(" ")
+    st.write(" "); st.write(" ")
+    st.button("🔍 내 하루 감정 분석하기", type="primary", on_click=handle_analyze_click, use_container_width=True)
+
+# --- 12) 결과/추천 출력 ---
+if st.session_state.final_emotion:
+    emo = st.session_state.final_emotion
+    st.subheader(f"오늘 하루의 핵심 감정은 '{emo}' 입니다.")
+    st.divider()
+    st.subheader(f"'{emo}' 감정을 위한 오늘의 Moodiary 추천")
+
+    music_items = st.session_state.music_recs
+    movie_items = st.session_state.movie_recs
+
+    for i in range(3):
+        col_music, col_movie = st.columns(2)
+
+        with col_music:
+            if i == 0: 
+                st.markdown("#### 🎵 이런 음악도 들어보세요?")
+                st.button("🔄 다른 음악 추천", on_click=refresh_music, use_container_width=True)
             
-            sh = init_db()
-            today = datetime.now().strftime("%Y-%m-%d")
-            add_diary(sh, st.session_state.username, today, emo, txt)
+            if i < len(music_items):
+                it = music_items[i]
+                # ⭐️⭐️⭐️ 딕셔너리(정보 꾸러미)인지 확인 ⭐️⭐️⭐️
+                if isinstance(it, dict) and it.get("id"):
+                    track_id = it.get("id")
+                    embed_url = f"https://open.spotify.com/embed/track/{track_id}?utm_source=generator&theme=0"
+                    components.iframe(embed_url, height=152)
+                elif isinstance(it, str):
+                    st.error(it) # "Spotify 오류: ..."
+                else:
+                    st.write(f"- {it}")
             
-            st.session_state.page = "result"
-            st.rerun()
+        with col_movie:
+            if i == 0: 
+                st.markdown("#### 🎬 이런 영화도 추천해요?")
+                st.button("🔄 다른 영화 추천", on_click=refresh_movies, use_container_width=True)
+                
+            if i < len(movie_items):
+                it = movie_items[i]
+                if isinstance(it, dict) and it.get("title"):
+                    poster = it.get("poster")
+                    if poster:
+                        st.image(poster, width=160)
+                    title = it.get("title", "제목없음")
+                    year = it.get("year", "N/A")
+                    rating = float(it.get("rating", 0.0))
+                    overview = it.get("overview", "") 
+                    line = f"##### **{title} ({year})**\n⭐ {rating:.1f}\n\n*{overview}*"
+                    st.markdown(line)
+                elif isinstance(it, dict):
+                    st.error(it.get("text", "영화 오류"))
+                else:
+                    st.error(f"- {it}")
 
-# =========================================
-# 🚀 앱 메인 컨트롤러
-# =========================================
-# ⭐️ use_container_width -> width='stretch'로 모두 수정
-if "logged_in" not in st.session_state: st.session_state.logged_in = False
-if "page" not in st.session_state: st.session_state.page = "login"
-
-if st.session_state.logged_in:
-    with st.sidebar:
-        st.write(f"**{st.session_state.username}**님")
-        if st.button("로그아웃", width='stretch'):
-            st.session_state.logged_in = False
-            st.session_state.page = "login"
-            st.rerun()
-
-if not st.session_state.logged_in: login_page()
-elif st.session_state.page == "dashboard": dashboard_page()
-elif st.session_state.page == "write": write_page()
-elif st.session_state.page == "result": result_page()
+        st.markdown("---")
