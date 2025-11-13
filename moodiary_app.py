@@ -4,7 +4,7 @@ import random
 import requests
 import torch
 from transformers import AutoModelForSequenceClassification, AutoTokenizer, AutoConfig
-import time
+import time 
 import streamlit.components.v1 as components
 import json
 import os
@@ -17,20 +17,22 @@ from google.oauth2.service_account import Credentials
 try:
     import spotipy
     from spotipy.oauth2 import SpotifyClientCredentials
-except Exception:
+    SPOTIPY_AVAILABLE = True
+except ImportError:
     spotipy = None
     SpotifyClientCredentials = None
+    SPOTIPY_AVAILABLE = False # ⭐️ 라이브러리 설치 실패를 기억
 
 # --- 2) 기본 설정 ---
 KOBERT_BASE_MODEL = "monologg/kobert"
-KOBERT_SAVED_REPO = "Young-jin/kobert-moodiary-app"
+KOBERT_SAVED_REPO = "Young-jin/kobert-moodiary-app" 
 TMDB_BASE_URL = "https://api.themoviedb.org/3"
-GSHEET_DB_NAME = "moodiary_db" # ⭐️ 구글 시트 파일 이름
+GSHEET_DB_NAME = "moodiary_db" 
 
 # 비상용 TMDB 키
 EMERGENCY_TMDB_KEY = "8587d6734fd278ecc05dcbe710c29f9c"
 
-# 감정별 테마 (색상, 이모지)
+# 감정별 테마
 EMOTION_META = {
     "행복": {"color": "#FFD700", "emoji": "😆", "desc": "최고의 하루!"},
     "슬픔": {"color": "#1E90FF", "emoji": "😭", "desc": "토닥토닥, 힘내요."},
@@ -52,8 +54,7 @@ def get_gsheets_client():
         scope = ['https://www.googleapis.com/auth/spreadsheets', 'https://www.googleapis.com/auth/drive']
         credentials = Credentials.from_service_account_info(creds, scopes=scope)
         return gspread.authorize(credentials)
-    except Exception as e:
-        # st.error(f"구글 시트 연결 실패: {e}")
+    except Exception:
         return None
 
 def init_db():
@@ -61,16 +62,11 @@ def init_db():
     if not client: return None
     try:
         sh = client.open(GSHEET_DB_NAME)
-    except:
-        return None # (시트가 없으면 None 반환)
-
-    # 유저/일기 시트가 있는지 확인
-    try:
         sh.worksheet("users")
         sh.worksheet("diaries")
+        return sh
     except:
-        return None # (시트가 깨져있으면 None 반환)
-    return sh
+        return None 
 
 def get_all_users(sh):
     if not sh: return {}
@@ -134,65 +130,63 @@ def analyze_diary_kobert(text, model, tokenizer, device, post_processing_map):
 
 @st.cache_resource
 def get_spotify_client():
+    # ⭐️ 1. 라이브러리 설치 확인
+    if not SPOTIPY_AVAILABLE:
+        return "Spotipy 라이브러리가 설치되지 않았습니다. (requirements.txt 확인)"
+    
+    # ⭐️ 2. Secrets 키 확인
     try:
         creds = st.secrets["spotify"]
-        manager = SpotifyClientCredentials(client_id=creds["client_id"], client_secret=creds["client_secret"])
-        return spotipy.Spotify(client_credentials_manager=manager, retries=3, backoff_factor=0.3)
-    except: return None
+        cid = creds["client_id"]
+        secret = creds["client_secret"]
+    except KeyError:
+        return "Secrets에 [spotify] 섹션 또는 키가 없습니다."
+    except Exception as e:
+         return f"Secrets 읽기 오류: {e}"
 
-# ⭐️ Spotify 로직 (강력한 안전장치)
+    if not cid or not secret:
+        return "Spotify client_id 또는 client_secret이 비어있습니다."
+        
+    # ⭐️ 3. Spotify 로그인 시도
+    try:
+        manager = SpotifyClientCredentials(client_id=cid, client_secret=secret)
+        sp = spotipy.Spotify(client_credentials_manager=manager, retries=3, backoff_factor=0.3)
+        sp.search(q="test", limit=1) # ⭐️ 로그인 테스트
+        return sp # ⭐️ 성공 시 클라이언트 객체 반환
+    except spotipy.exceptions.SpotifyException as e:
+        return f"Spotify 로그인 실패 (키 값 오류?): {e}"
+    except Exception as e:
+        return f"Spotify 클라이언트 생성 실패: {e}"
+
+# ⭐️ Spotify 추천 로직 (오류 메시지 표시)
 def recommend_music(emotion):
     sp = get_spotify_client()
-    if not sp: return [{"error": "Spotify 연결 실패"}]
     
-    # 1. 감정별 공식/인기 큐레이션 ID (안정적)
-    SAFE_PLAYLISTS = {
-        "행복": ["37i9dQZEVXbJxxNsEk86S4", "37i9dQZF1DXcBWIGoYBM5M"], # K-Pop ON!, Today's Top Hits
-        "슬픔": ["37i9dQZF1DXa29a0n9wGgC", "37i9dQZF1DX7qK8ma5wgG1"], # K-Pop Ballad, Sad Songs
-        "분노": ["37i9dQZF1DXdfhOsjPtoaS", "37i9dQZF1DWWJOmJ7nRx0C"], # K-Rock, Rock Hard
-        "힘듦": ["37i9dQZF1DXdls6m8FLMpo", "37i9dQZF1DWV7EzJMK2FUI"], # Healing K-Pop, Jazz in the Background
-        "놀람": ["37i9dQZEVXbJxxNsEk86S4", "37i9dQZF1DX4dyzvuaRJ0n"], # K-Pop ON!, Mint
-        "중립": ["37i9dQZF1DWT9uTRZAYj0c"] # Chill Tracks
+    # ⭐️ sp가 spotipy.Spotify 객체가 아니라면 (즉, 오류 메시지라면)
+    if not isinstance(sp, spotipy.Spotify):
+        return [{"error": sp}] # ⭐️ get_spotify_client에서 받은 오류 메시지를 반환
+    
+    # (이하는 기존 로직과 동일)
+    KR_KEYWORDS = {
+        "행복": ["여행", "행복", "케이팝 최신", "여름 노래"],
+        "슬픔": ["발라드 최신", "이별 노래", "감성 케이팝", "K-ballad"],
+        "분노": ["인기 밴드", "팝송", "스트레스", "재즈"],
+        "힘듦": ["위로 노래", "힐링 케이팝", "잔잔한 팝"],
+        "놀람": ["파티 케이팝", "EDM 케이팝", "페스티벌 음악"],
     }
+    query = random.choice(KR_KEYWORDS.get(emotion, ["케이팝"])) + " year:2010-2025 NOT children"
     
     try:
-        candidates = SAFE_PLAYLISTS.get(emotion, SAFE_PLAYLISTS["중립"])
-        random.shuffle(candidates)
-        
-        valid_tracks = []
-        for pid in candidates:
-            try:
-                results = sp.playlist_items(pid, limit=30)
-                items = results.get('items', []) if results else []
-                for it in items:
-                    t = it.get('track')
-                    if t and t.get('id') and t.get('name'):
-                         valid_tracks.append({"id": t['id'], "title": t['name']})
-                if len(valid_tracks) >= 5: break
-            except: continue
-
-        # 2. 만약 1번이 (네트워크 등 이유로) 실패하면, 키워드 검색으로 재시도 (안전장치 2)
-        if not valid_tracks:
-            KR_KEYWORDS = {
-                "행복": ["여행", "행복", "케이팝 최신", "여름 노래"],
-                "슬픔": ["발라드 최신", "이별 노래", "감성 케이팝"],
-                "분노": ["인기 밴드", "팝송", "스트레스", "재즈"],
-                "힘듦": ["위로 노래", "힐링 케이팝", "잔잔한 팝"],
-                "놀람": ["파티 케이팝", "EDM 케이팝", "페스티벌 음악"],
-            }
-            query = random.choice(KR_KEYWORDS.get(emotion, ["케이팝"])) + " year:2010-2025 NOT children"
-            res = sp.search(q=query, type="track", limit=20)
-            items = (res.get("tracks") or {}).get("items") or []
-            for t in items:
-                if t.get('id') and t.get('name'):
-                    valid_tracks.append({"id": t['id'], "title": t['name']})
-
-        if not valid_tracks: return [{"error": "추천 곡을 찾지 못했습니다."}]
-        
+        res = sp.search(q=query, type="track", limit=20)
+        tracks = (res.get("tracks") or {}).get("items") or []
+        valid = []
+        for t in tracks:
+            if t.get('id') and t.get('name'):
+                 valid.append({"id": t['id'], "title": t['name']})
+        if not valid: return [{"error": "추천 곡을 찾지 못했습니다."}]
         seen = set(); unique = []
-        for v in valid_tracks:
+        for v in valid:
              if v['id'] not in seen: unique.append(v); seen.add(v['id'])
-             
         return random.sample(unique, k=min(3, len(unique)))
     except Exception as e: return [{"error": f"Spotify 오류: {e}"}]
 
@@ -248,13 +242,11 @@ def login_page():
 def dashboard_page():
     st.title(f"{st.session_state.username}님의 감정 달력 📅")
     
-    # ⭐️ 감정 색상 범례 (Legend)
     legend_cols = st.columns(6)
     for i, (emo, meta) in enumerate(EMOTION_META.items()):
         legend_cols[i].markdown(f"<span style='color:{meta['color']}; font-size: 1.2em;'>●</span> {emo}", unsafe_allow_html=True)
     st.divider()
 
-    # 달력 데이터 로드
     sh = init_db()
     my_diaries = get_user_diaries(sh, st.session_state.username)
     events = []
@@ -268,7 +260,6 @@ def dashboard_page():
              custom_css=".fc-event-title { font-size: 2em !important; text-align: center; } .fc-bg-event { opacity: 0.6; }")
     st.write("")
 
-    # ⭐️⭐️⭐️ 신규 기능: 오늘 일기 유무에 따른 버튼 분리 ⭐️⭐️⭐️
     today_str = datetime.now().strftime("%Y-%m-%d")
     today_diary_exists = today_str in my_diaries
 
@@ -292,10 +283,9 @@ def dashboard_page():
                 handle_show_recs()
                 st.rerun()
     else:
-        # 오늘 일기가 없을 때
         if st.button("✏️ 오늘의 일기 쓰러 가기", type="primary", width='stretch'):
             st.session_state.page = "write"
-            st.session_state.diary_input = "" # ⭐️ 새 일기
+            st.session_state.diary_input = "" 
             st.rerun()
 
 def result_page():
@@ -319,7 +309,7 @@ def result_page():
         for item in st.session_state.music_recs:
             if item.get('id'):
                 components.iframe(f"https://open.spotify.com/embed/track/{item['id']}?utm_source=generator", height=80)
-            else: st.error(item.get("error", "로딩 실패"))
+            else: st.error(item.get("error", "로딩 실패")) # ⭐️ 오류 메시지 표시
     with c2:
         st.markdown("#### 🎬 추천 영화")
         st.button("🔄 다른 영화", on_click=refresh_movies, key="rv_btn", width='stretch')
@@ -328,7 +318,7 @@ def result_page():
                 ic, tc = st.columns([1, 2])
                 ic.image(item['poster'], use_container_width=True)
                 tc.markdown(f"**{item['title']} ({item['year']})**\n⭐ {item['rating']:.1f}\n\n*{item.get('overview','')[:100]}...*")
-            else: st.error(item.get("text", "로딩 실패"))
+            else: st.error(item.get("text", "로딩 실패")) # ⭐️ 오류 메시지 표시
 
 def write_page():
     st.title("오늘의 이야기 📝")
@@ -339,7 +329,6 @@ def write_page():
     model, tokenizer, device, postmap = load_kobert_model()
     if not model: st.error("AI 모델 로드 중..."); return
 
-    # ⭐️ 수정 시 기존 일기 불러오기
     if "diary_input" not in st.session_state: st.session_state.diary_input = ""
     txt = st.text_area("오늘 하루는 어땠나요?", value=st.session_state.diary_input, height=300, key="diary_editor")
     
@@ -354,7 +343,7 @@ def write_page():
             
             sh = init_db()
             today = datetime.now().strftime("%Y-%m-%d")
-            add_diary(sh, st.session_state.username, today, emo, txt) # ⭐️ 덮어쓰기 (저장)
+            add_diary(sh, st.session_state.username, today, emo, txt)
             
             st.session_state.page = "result"
             st.rerun()
@@ -362,10 +351,10 @@ def write_page():
 # =========================================
 # 🚀 앱 메인 컨트롤러
 # =========================================
+# ⭐️ use_container_width -> width='stretch'로 모두 수정
 if "logged_in" not in st.session_state: st.session_state.logged_in = False
 if "page" not in st.session_state: st.session_state.page = "login"
 
-# ⭐️ use_container_width 경고 수정
 if st.session_state.logged_in:
     with st.sidebar:
         st.write(f"**{st.session_state.username}**님")
@@ -374,7 +363,6 @@ if st.session_state.logged_in:
             st.session_state.page = "login"
             st.rerun()
 
-# 페이지 라우팅
 if not st.session_state.logged_in: login_page()
 elif st.session_state.page == "dashboard": dashboard_page()
 elif st.session_state.page == "write": write_page()
