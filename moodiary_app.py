@@ -157,13 +157,11 @@ def get_spotify_client():
     except Exception as e:
         return f"Spotify 로그인 실패: {e}"
 
-# ⭐️⭐️⭐️ [핵심 수정] recommend_music: '감정' + '선호 장르' 조합 검색 ⭐️⭐️⭐️
 def recommend_music(emotion):
     sp = get_spotify_client()
     if not isinstance(sp, spotipy.Spotify):
         return [{"error": sp}]
 
-    # (수정) 감정별로 선호 장르(K-Pop, 발라드, 밴드, 힙합)를 조합한 '검색 키워드 리스트'
     SEARCH_KEYWORDS_MAP = {
         "행복": ["신나는 K-Pop", "Upbeat Band", "K-Pop Hits", "Today's Top Hits"],
         "슬픔": ["위로가 되는 발라드", "새벽 감성 힙합", "Chill K-Pop", "K-Pop Ballad"],
@@ -173,19 +171,16 @@ def recommend_music(emotion):
         "중립": ["K-Pop 발라드", "국힙 Top 100", "Chill", "Korean Band"]
     }
     
-    # (수정) 감정에 맞는 키워드 리스트에서 하나를 '랜덤'으로 선택
     keyword_list = SEARCH_KEYWORDS_MAP.get(emotion, SEARCH_KEYWORDS_MAP["중립"])
     query = random.choice(keyword_list)
     
     try:
-        # (기존) 'playlist' 타입으로 '검색'
         results = sp.search(q=query, type="playlist", limit=10, market="KR")
         playlists = results.get('playlists', {}).get('items', [])
         
         if not playlists:
             return [{"error": f"'{query}' 검색 결과 플레이리스트 없음"}]
 
-        # (기존) 검색된 여러 플레이리스트에서 트랙을 수집
         valid_tracks = []
         random.shuffle(playlists) 
 
@@ -207,7 +202,6 @@ def recommend_music(emotion):
         if not valid_tracks: 
             return [{"error": "추천 곡을 찾지 못했습니다."}]
         
-        # 중복 제거
         seen = set(); unique = []
         for v in valid_tracks:
             if v['id'] not in seen: unique.append(v); seen.add(v['id'])
@@ -280,14 +274,52 @@ def dashboard_page():
     for date_str, data in my_diaries.items():
         emo = data.get("emotion", "중립")
         meta = EMOTION_META.get(emo, EMOTION_META["중립"])
-        events.append({"title": meta["emoji"], "start": date_str, "display": "background", "backgroundColor": meta["color"], "borderColor": meta["color"]})
-        events.append({"title": meta["emoji"], "start": date_str, "allDay": True, "backgroundColor": "transparent", "borderColor": "transparent", "textColor": "#000000"})
+        # ⭐️⭐️⭐️ [수정됨] 달력 이모티콘은 하나만 표시되도록 수정 ⭐️⭐️⭐️
+        events.append({"title": meta["emoji"], "start": date_str, "allDay": True, "backgroundColor": meta["color"], "borderColor": meta["color"], "textColor": "#000000"})
 
+    # ⭐️⭐️⭐️ [수정됨] 달력 이모티콘 중앙 정렬 및 크기 조절 CSS ⭐️⭐️⭐️
     calendar(events=events, options={"headerToolbar": {"left": "prev,next today", "center": "title", "right": ""}, "initialView": "dayGridMonth"}, 
-             custom_css=".fc-event-title { font-size: 2em !important; text-align: center; } .fc-bg-event { opacity: 0.6; }")
+             custom_css="""
+             .fc-event-title {
+                 font-size: 3em !important; /* 이모티콘 크기 3배 */
+                 text-align: center;
+                 display: flex;
+                 justify-content: center;
+                 align-items: center;
+                 height: 100%; /* 셀 높이 전체를 차지하도록 */
+                 line-height: 1; /* 텍스트 줄 간격 */
+             }
+             .fc-daygrid-event {
+                 padding: 0;
+                 margin: 0;
+                 border: none;
+                 background-color: transparent !important;
+                 color: black !important;
+             }
+             .fc-daygrid-day-frame {
+                 display: flex;
+                 flex-direction: column;
+                 justify-content: center; /* 세로 중앙 정렬 */
+                 align-items: center; /* 가로 중앙 정렬 */
+             }
+             .fc-daygrid-day-number {
+                 position: absolute;
+                 top: 5px;
+                 right: 5px;
+                 font-size: 0.8em; /* 날짜 숫자는 작게 유지 */
+                 color: black;
+             }
+             .fc-daygrid-day-top {
+                flex-grow: 1;
+                display: flex;
+                flex-direction: column;
+                justify-content: center;
+                align-items: center;
+             }
+             """
+             )
     st.write("")
 
-    # ⭐️⭐️⭐️ 신규 기능: 오늘 일기 유무에 따른 버튼 분리 ⭐️⭐️⭐️
     today_str = datetime.now().strftime("%Y-%m-%d")
     today_diary_exists = today_str in my_diaries
 
@@ -336,8 +368,8 @@ def result_page():
         st.button("🔄 다른 음악", on_click=refresh_music, key="rm_btn", width='stretch')
         for item in st.session_state.music_recs:
             if item.get('id'):
-                # (수정) 올바른 스포티파이 임베드 URL
-                components.iframe(f"https://open.spotify.com/embed/track/{item['id']}", height=80)
+                # ⭐️⭐️⭐️ [수정됨] 스포티파이 iframe 크기 조절 (height, width) ⭐️⭐️⭐️
+                components.iframe(f"https://open.spotify.com/embed/track/{item['id']}", height=250, width="100%") 
             else: 
                 st.error(item.get("error", "로딩 실패"))
     with c2:
