@@ -32,14 +32,14 @@ GSHEET_DB_NAME = "moodiary_db"
 # 비상용 TMDB 키
 EMERGENCY_TMDB_KEY = "8587d6734fd278ecc05dcbe710c29f9c"
 
-# 감정별 테마 (색상 변경: 분노, 중립)
+# ⭐️ [수정] 감정별 테마 (색상 RGBA로 옅게 조정)
 EMOTION_META = {
-    "행복": {"color": "#FFD700", "emoji": "😆", "desc": "최고의 하루!"},       # 노랑
-    "슬픔": {"color": "#1E90FF", "emoji": "😭", "desc": "토닥토닥, 힘내요."},     # 파랑
-    "분노": {"color": "#FF0000", "emoji": "🤬", "desc": "워워, 진정해요."},       # 빨강
-    "힘듦": {"color": "#808080", "emoji": "🤯", "desc": "휴식이 필요해."},     # 회색
-    "놀람": {"color": "#8A2BE2", "emoji": "😱", "desc": "깜짝 놀랐군요!"},     # 보라
-    "중립": {"color": "#363636", "emoji": "😐", "desc": "평온한 하루."}        # 어두운 회색 (검정)
+    "행복": {"color": "rgba(255, 215, 0, 0.4)", "emoji": "😆", "desc": "최고의 하루!"}, # 노랑 (40% 불투명)
+    "슬픔": {"color": "rgba(30, 144, 255, 0.4)", "emoji": "😭", "desc": "토닥토닥, 힘내요."}, # 파랑 (40% 불투명)
+    "분노": {"color": "rgba(255, 0, 0, 0.4)", "emoji": "🤬", "desc": "워워, 진정해요."},   # 빨강 (40% 불투명)
+    "힘듦": {"color": "rgba(128, 128, 128, 0.4)", "emoji": "🤯", "desc": "휴식이 필요해."}, # 회색 (40% 불투명)
+    "놀람": {"color": "rgba(138, 43, 226, 0.4)", "emoji": "😱", "desc": "깜짝 놀랐군요!"}, # 보라 (40% 불투명)
+    "중립": {"color": "rgba(54, 54, 54, 0.2)", "emoji": "😐", "desc": "평온한 하루."}    # 어두운 회색 (20% 불투명, 더 옅게)
 }
 
 # 대한민국 표준시(KST) 정의 (UTC+9)
@@ -264,6 +264,7 @@ def dashboard_page():
     
     legend_cols = st.columns(6)
     for i, (emo, meta) in enumerate(EMOTION_META.items()):
+        # ⭐️ [수정] 범례 색상도 rgba로 맞춰서 표시
         legend_cols[i].markdown(f"<span style='color:{meta['color']}; font-size: 1.2em;'>●</span> {emo}", unsafe_allow_html=True)
     st.divider()
 
@@ -271,7 +272,6 @@ def dashboard_page():
     my_diaries = get_user_diaries(sh, st.session_state.username)
     events = []
     
-    # ⭐️⭐️⭐️ [핵심 수정] 이벤트를 '배경색'과 '이모티콘'으로 분리 ⭐️⭐️⭐️
     for date_str, data in my_diaries.items():
         emo = data.get("emotion", "중립")
         meta = EMOTION_META.get(emo, EMOTION_META["중립"])
@@ -288,12 +288,12 @@ def dashboard_page():
             "title": meta["emoji"], 
             "start": date_str, 
             "allDay": True,
-            "backgroundColor": "transparent", # 이벤트 자체의 배경은 투명
-            "borderColor": "transparent",     # 이벤트 자체의 테두리도 투명
-            "textColor": "#000000"
+            "backgroundColor": "transparent",
+            "borderColor": "transparent",
+            "textColor": "#000000" # 이모티콘 색상은 검정색으로 유지 (배경과 대비)
         })
 
-    # ⭐️⭐️⭐️ [핵심 수정] 달력 CSS (이모티콘 위로 + 배경색 100%) ⭐️⭐️⭐️
+    # ⭐️ [수정] 달력 CSS (이모티콘 위치, 날짜 숫자 Z-index, 이모티콘 그림자) ⭐️
     calendar(events=events, options={"headerToolbar": {"left": "prev,next today", "center": "title", "right": ""}, "initialView": "dayGridMonth"}, 
              custom_css="""
              /* 1. 이모티콘 (타이틀) 스타일 */
@@ -304,8 +304,10 @@ def dashboard_page():
                  align-items: center;
                  height: 100%;
                  line-height: 1;
-                 /* ⭐️ [수정] 20px 위로 이동 */
-                 transform: translateY(-20px); 
+                 /* ⭐️ [수정] 25px 위로 이동 (이모티콘 위치 조정) */
+                 transform: translateY(-25px); 
+                 /* ⭐️ [추가] 이모티콘에 미세한 그림자 추가하여 가독성 향상 */
+                 text-shadow: 1px 1px 2px rgba(0,0,0,0.2); 
              }
  
              /* 2. 이모티콘 '이벤트' 스타일 (투명) */
@@ -314,7 +316,6 @@ def dashboard_page():
                  margin: 0 !important;
                  border: none !important;
                  color: black !important;
-                 /* ⭐️ 이모티콘 이벤트 자체의 배경은 무조건 투명 */
                  background-color: transparent !important; 
              }
  
@@ -334,8 +335,10 @@ def dashboard_page():
                   top: 5px;
                   right: 5px;
                   font-size: 0.8em;
-                  color: black;
-                  z-index: 2;
+                  color: black; /* ⭐️ [수정] 날짜 숫자는 항상 검정색으로 유지 */
+                  /* ⭐️ [수정] z-index를 높여 배경색 위에 보이도록 */
+                  z-index: 10 !important; 
+                  text-shadow: 1px 1px 2px rgba(255,255,255,0.5); /* ⭐️ [추가] 흰색 그림자로 대비 향상 */
              }
              
              /* 5. 날짜 셀 '컨텐츠 영역' 스타일 (이모티콘 배치 영역) */
@@ -343,20 +346,19 @@ def dashboard_page():
                 flex-grow: 1;
                 display: flex;
                 flex-direction: column;
-                justify-content: center; /* 이모티콘을 세로 중앙에 배치 */
+                justify-content: center;
                 align-items: center;
                 width: 100%;
              }
              
-             /* 6. ⭐️ [추가] 배경 이벤트의 투명도를 100%로 설정 */
+             /* 6. 배경 이벤트의 투명도를 100%로 설정 (위에 RGBA로 이미 투명도 조절) */
              .fc-bg-event {
-                 opacity: 1.0 !important;
+                 opacity: 1.0 !important; 
              }
              """
              )
     st.write("")
 
-    # 오늘 날짜를 KST 기준으로 가져옴
     today_str = datetime.now(KST).strftime("%Y-%m-%d")
     today_diary_exists = today_str in my_diaries
 
@@ -440,7 +442,6 @@ def write_page():
             st.session_state.movie_recs = recommend_movies(emo)
             
             sh = init_db()
-            # 오늘 날짜를 KST 기준으로 가져옴
             today = datetime.now(KST).strftime("%Y-%m-%d")
             add_diary(sh, st.session_state.username, today, emo, txt)
             
@@ -465,3 +466,4 @@ if not st.session_state.logged_in: login_page()
 elif st.session_state.page == "dashboard": dashboard_page()
 elif st.session_state.page == "write": write_page()
 elif st.session_state.page == "result": result_page()
+```http://googleusercontent.com/image_generation_content/1
