@@ -353,25 +353,34 @@ def dashboard_page():
         chart_data = emotion_counts.reset_index()
         chart_data.columns = ['emotion', 'count']
 
-        # 3. ⭐️ [수정] 차트에 사용할 옅은 색상 (EMOTION_META)
-        domain = list(EMOTION_META.keys())
-        range_ = [meta['color'] for meta in EMOTION_META.values()] # 옅은 rgba 색상 사용
+        # 3. ⭐️ [수정] 차트에 사용할 *헥스(Hex)* 색상 코드 정의
+        chart_colors = {
+            "행복": "#FFD700",
+            "슬픔": "#1E90FF",
+            "분노": "#FF0000",
+            "힘듦": "#808080",
+            "놀람": "#8A2BE2",
+            "중립": "#363636"
+        }
+        
+        domain = list(chart_colors.keys())
+        range_ = list(chart_colors.values())
 
         # 4. Altair 차트 생성
         chart = alt.Chart(chart_data).mark_bar(
             cornerRadius=5, 
-            # ⭐️ [수정] 옅은 rgba 색상을 사용하므로, opacity는 1.0(불투명)으로 설정
-            opacity=1.0      
+            # ⭐️ [수정] '옅은' 효과를 여기서 Opacity로 줌
+            opacity=0.6 
         ).encode(
             # X축: 감정 (글자 가로 표시)
             x=alt.X('emotion', sort=domain, title='감정', axis=alt.Axis(labelAngle=0)),
             
-            # ⭐️ [수정] :Q (숫자) 명시 + Y축 최소값 0 고정
+            # ⭐️ [수정] Y축 0 고정 (zero=True) 및 정수 단위(tickMinStep=1)
             y=alt.Y('count:Q', title='횟수', 
                     axis=alt.Axis(format='d', tickMinStep=1), 
-                    scale=alt.Scale(domainMin=0)),
+                    scale=alt.Scale(zero=True)), # zero=True가 음수 표시를 막음
             
-            # 색상: 감정별로 매핑 (옅은 색상)
+            # ⭐️ [수정] 색상: Hex 코드로 매핑
             color=alt.Color('emotion', 
                             legend=None, 
                             scale=alt.Scale(domain=domain, range=range_)),
