@@ -12,7 +12,8 @@ from datetime import datetime, timezone, timedelta # KST
 from streamlit_calendar import calendar
 import gspread
 from google.oauth2.service_account import Credentials
-import pandas as pd # ⭐️ [추가] 통계 기능을 위한 pandas 임포트
+import pandas as pd
+import altair as alt # ⭐️ [추가] Altair 차트 라이브러리
 
 # (선택) Spotify SDK
 try:
@@ -260,7 +261,6 @@ def login_page():
                 if add_user(sh, nid, npw): st.success("가입 성공! 로그인해주세요.")
                 else: st.error("가입 실패 (DB 오류)")
 
-# ⭐️⭐️⭐️ [핵심 수정] dashboard_page: 탭 기능 추가 ⭐️⭐️⭐️
 def dashboard_page():
     st.title(f"{st.session_state.username}님의 감정 달력 📅")
     
@@ -272,11 +272,9 @@ def dashboard_page():
     sh = init_db()
     my_diaries = get_user_diaries(sh, st.session_state.username)
     
-    # ⭐️ [추가] 탭 생성
     tab1, tab2 = st.tabs(["📅 감정 달력", "📊 이달의 통계"])
 
     with tab1:
-        # ⭐️ [이동] 기존 달력 로직
         events = []
         for date_str, data in my_diaries.items():
             emo = data.get("emotion", "중립")
@@ -335,45 +333,75 @@ def dashboard_page():
                  )
         st.write("")
 
+    # ⭐️⭐️⭐️ [핵심 수정] '이달의 통계' 탭: Altair 차트로 교체 ⭐️⭐️⭐️
     with tab2:
-        # ⭐️ [신규] '이달의 통계' 로직
-        st.subheader(f"{datetime.now(KST).month}월의 감정 통계")
-        
         today = datetime.now(KST)
+        st.subheader(f"{today.month}월의 감정 통계")
+        
         current_month_str = today.strftime("%Y-%m")
         
-        # 1. 이번 달 일기만 필터링
         month_emotions = []
         for date_str, data in my_diaries.items():
             if date_str.startswith(current_month_str):
                 month_emotions.append(data.get('emotion', '중립'))
         
-        # 2. 통계 생성
         if not month_emotions:
             st.info("이번 달에 작성된 일기가 아직 없습니다.")
         else:
-            # Pandas를 사용하여 감정 횟수 계산
+            # 1. Pandas로 감정 횟수 계산 (0회 포함)
             df = pd.DataFrame(month_emotions, columns=['emotion'])
-            # .reindex()를 사용해 모든 감정 순서대로 정렬, fill_value=0으로 없는 감정 0 처리
             emotion_counts = df['emotion'].value_counts().reindex(EMOTION_META.keys(), fill_value=0)
-            # 0회인 감정은 차트에서 제외
-            emotion_counts = emotion_counts[emotion_counts > 0]
+            
+            # 2. Altair 차트용 데이터프레임으로 변환
+            chart_data = emotion_counts.reset_index().rename(columns={'index': 'emotion', 'emotion': 'count'})
 
-            if emotion_counts.empty:
-                st.info("이번 달에 작성된 일기가 아직 없습니다.")
-            else:
-                # 3. 막대 차트 표시
-                st.bar_chart(emotion_counts)
+            # 3. 차트에 사용할 원본 색상 정의 (옅은 색 아님)
+            chart_colors = {
+                "행복": "#FFD700",
+                "슬픔": "#1E90FF",
+                "분노": "#FF0000",
+                "힘듦": "#808080",
+                "놀람": "#8A2BE2",
+                "중립": "#363636"
+            }
+            
+            # 4. 색상 매핑 순서 정의
+            domain = list(chart_colors.keys())
+            range_ = list(chart_colors.values())
+
+            # 5. Altair 차트 생성
+            chart = alt.Chart(chart_data).mark_bar(
+                cornerRadius=5, # ⭐️ 막대 모서리 둥글게 (시각화 개선)
+                opacity=0.8      # ⭐️ 막대 투명도 (시각화 개선)
+            ).encode(
+                # X축: 감정 (EMOTION_META에 정의된 순서대로)
+                x=alt.X('emotion', sort=domain, title='감정', axis=alt.Axis(labelAngle=0)),
                 
-                # 4. 텍스트로 횟수 표시
-                st.write("---")
-                st.write("감정별 횟수:")
-                for emo, count in emotion_counts.items():
-                    if count > 0:
-                        st.write(f"{EMOTION_META[emo]['emoji']} {emo}: {count}회")
+                # Y축: 횟수 (0부터 시작, 정수로 표시)
+                y=alt.Y('count', title='횟수', axis=alt.Axis(format='d', tickMinStep=1)),
+                
+                # 색상: 감정별로 매핑
+                color=alt.Color('emotion', 
+                                legend=None, # 범례는 숨김 (X축과 중복)
+                                scale=alt.Scale(domain=domain, range=range_)),
+                
+                # 툴팁: 마우스를 올리면 감정과 횟수 표시
+                tooltip=['emotion', 'count']
+            ).properties(
+                title=f'{today.month}월의 감정 분포' # ⭐️ 차트 제목 추가
+            ).interactive() # ⭐️ 확대/축소 가능
 
-    # ⭐️ [위치] '오늘 일기' 버튼은 탭 밖에 위치
-    st.divider() # 탭과 버튼 사이에 구분선 추가
+            # 6. 차트 표시
+            st.altair_chart(chart, use_container_width=True)
+            
+            # 7. 텍스트로 횟수 표시 (0회인 감정도 모두 표시)
+            st.write("---")
+            st.write("감정별 횟수:")
+            for emo, count in emotion_counts.items():
+                # ⭐️ [수정] 0회인 감정도 모두 표시
+                st.write(f"{EMOTION_META[emo]['emoji']} {emo}: {count}회")
+
+    st.divider() 
     today_str = datetime.now(KST).strftime("%Y-%m-%d")
     today_diary_exists = today_str in my_diaries
 
