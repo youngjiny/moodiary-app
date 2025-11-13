@@ -157,42 +157,41 @@ def get_spotify_client():
     except Exception as e:
         return f"Spotify 로그인 실패: {e}"
 
-# ⭐️⭐️⭐️ [핵심 수정] recommend_music: 404 오류 해결 (검색 기반) ⭐️⭐️⭐️
+# ⭐️⭐️⭐️ [핵심 수정] recommend_music: '감정' + '선호 장르' 조합 검색 ⭐️⭐️⭐️
 def recommend_music(emotion):
     sp = get_spotify_client()
     if not isinstance(sp, spotipy.Spotify):
-        return [{"error": sp}] # ⭐️ Secrets 설정 오류 등을 여기서 반환
+        return [{"error": sp}]
 
-    # (수정) 하드코딩된 ID 대신 감정별 '검색 키워드'를 사용합니다.
-    SEARCH_KEYWORDS = {
-        "행복": "happy hits",
-        "슬픔": "sad songs",
-        "분노": "anger management rock", # "workout" 등도 가능
-        "힘듦": "relaxing",
-        "놀람": "upbeat party",
-        "중립": "chill vibes"
+    # (수정) 감정별로 선호 장르(K-Pop, 발라드, 밴드, 힙합)를 조합한 '검색 키워드 리스트'
+    SEARCH_KEYWORDS_MAP = {
+        "행복": ["신나는 K-Pop", "Upbeat Band", "K-Pop Hits", "Today's Top Hits"],
+        "슬픔": ["위로가 되는 발라드", "새벽 감성 힙합", "Chill K-Pop", "K-Pop Ballad"],
+        "분노": ["스트레스 해소 밴드", "신나는 힙합", "Driving K-Pop", "국내 힙합"],
+        "힘듦": ["Lofi Hip Hop", "편안한 발라드", "Chill Band", "위로 K-Pop"],
+        "놀람": ["K-Pop Party", "국내 밴드", "Upbeat Hip Hop"],
+        "중립": ["K-Pop 발라드", "국힙 Top 100", "Chill", "Korean Band"]
     }
     
-    # 감정에 맞는 검색어 선택
-    query = SEARCH_KEYWORDS.get(emotion, "chill vibes")
+    # (수정) 감정에 맞는 키워드 리스트에서 하나를 '랜덤'으로 선택
+    keyword_list = SEARCH_KEYWORDS_MAP.get(emotion, SEARCH_KEYWORDS_MAP["중립"])
+    query = random.choice(keyword_list)
     
     try:
-        # (수정) ID로 조회하는 대신 'playlist' 타입으로 '검색'합니다.
-        # 이것이 404 오류를 우회하는 핵심입니다.
+        # (기존) 'playlist' 타입으로 '검색'
         results = sp.search(q=query, type="playlist", limit=10, market="KR")
         playlists = results.get('playlists', {}).get('items', [])
         
         if not playlists:
             return [{"error": f"'{query}' 검색 결과 플레이리스트 없음"}]
 
-        # (수정) 검색된 여러 플레이리스트에서 트랙을 수집
+        # (기존) 검색된 여러 플레이리스트에서 트랙을 수집
         valid_tracks = []
-        random.shuffle(playlists) # 플레이리스트 순서를 섞음
+        random.shuffle(playlists) 
 
         for pl in playlists:
             try:
                 pid = pl['id']
-                # (수정) 이제 공개된 pid로 트랙을 가져옵니다.
                 tracks_results = sp.playlist_items(pid, limit=30)
                 items = tracks_results.get('items', []) if tracks_results else []
                 for it in items:
@@ -200,10 +199,9 @@ def recommend_music(emotion):
                     if t and t.get('id') and t.get('name'):
                          valid_tracks.append({"id": t['id'], "title": t['name']})
                 
-                if len(valid_tracks) >= 10: # 충분한 곡이 모이면 중단
+                if len(valid_tracks) >= 10: 
                     break
             except Exception as e:
-                # 개별 플레이리스트 로드 실패는 무시 (권한 없는 ID 등)
                 continue 
 
         if not valid_tracks: 
@@ -338,7 +336,7 @@ def result_page():
         st.button("🔄 다른 음악", on_click=refresh_music, key="rm_btn", width='stretch')
         for item in st.session_state.music_recs:
             if item.get('id'):
-                # (수정) 올바른 스포티파이 임베드 URL (공백 오류 수정됨)
+                # (수정) 올바른 스포티파이 임베드 URL
                 components.iframe(f"https://open.spotify.com/embed/track/{item['id']}", height=80)
             else: 
                 st.error(item.get("error", "로딩 실패"))
