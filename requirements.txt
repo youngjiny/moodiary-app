@@ -1,7 +1,6 @@
 streamlit
 pandas
 matplotlib
-spotipy
 requests
 torch
 transformers
@@ -9,3 +8,4 @@ sentencepiece
 streamlit-calendar
 gspread
 google-auth
+spotipy
