@@ -87,10 +87,12 @@ def add_user(sh, username, password):
         return True
     except: return False
 
+# ⭐️⭐️⭐️ [핵심 수정] get_user_diaries: 오타 수정 ⭐️⭐️⭐️
 def get_user_diaries(sh, username):
     if not sh: return {}
     try:
-        rows = sh.worksksheet("diaries").get_all_records()
+        # ⭐️ 오타 수정: sh.worksksheet -> sh.worksheet
+        rows = sh.worksheet("diaries").get_all_records()
         user_diaries = {}
         for row in rows:
             if row['username'] == username:
@@ -269,6 +271,7 @@ def dashboard_page():
     st.divider()
 
     sh = init_db()
+    # ⭐️ 이제 get_user_diaries가 오타 없이 정상 작동합니다.
     my_diaries = get_user_diaries(sh, st.session_state.username)
     events = []
     for date_str, data in my_diaries.items():
@@ -284,7 +287,7 @@ def dashboard_page():
             "textColor": "#000000"
         })
 
-    # ⭐️⭐️⭐️ [핵심 수정] 달력 CSS 수정 (색깔 부활, 중앙 정렬) ⭐️⭐️⭐️
+    # (이전과 동일) 달력 CSS (색깔 + 중앙 정렬)
     calendar(events=events, options={"headerToolbar": {"left": "prev,next today", "center": "title", "right": ""}, "initialView": "dayGridMonth"}, 
              custom_css="""
              /* 1. 이모티콘 (타이틀) 스타일 */
@@ -403,7 +406,7 @@ def result_page():
                 ic, tc = st.columns([1, 2])
                 ic.image(item['poster'], use_container_width=True)
                 tc.markdown(f"**{item['title']} ({item['year']})**\n⭐ {item['rating']:.1f}\n\n*{item.get('overview','')[:100]}...*")
-            else: st.error(item.get("text", "로딩 실패"))
+            else: st.error(item.get("text", "Loding fail"))
 
 def write_page():
     st.title("오늘의 이야기 📝")
