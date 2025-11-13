@@ -51,7 +51,7 @@ st.set_page_config(layout="wide", page_title="MOODIARY")
 def get_gsheets_client():
     try:
         creds = st.secrets["connections"]["gsheets"]
-        scope = ['https://www.googleapis.com/auth/spreadsheets', 'https://www.googleapis.com/auth/drive']
+        scope = ['https.www.googleapis.com/auth/spreadsheets', 'https://www.googleapis.com/auth/drive']
         credentials = Credentials.from_service_account_info(creds, scopes=scope)
         return gspread.authorize(credentials)
     except Exception as e:
@@ -63,12 +63,14 @@ def init_db():
     try:
         sh = client.open(GSHEET_DB_NAME)
     except:
-        return None 
+        return None # (시트가 없으면 None 반환)
+
+    # 유저/일기 시트가 있는지 확인
     try:
         sh.worksheet("users")
         sh.worksheet("diaries")
     except:
-        return None 
+        return None # (시트가 깨져있으면 None 반환)
     return sh
 
 def get_all_users(sh):
@@ -99,12 +101,22 @@ def get_user_diaries(sh, username):
 def add_diary(sh, username, date, emotion, text):
     if not sh: return False
     try:
+        # ⭐️ 이미 해당 날짜에 일기가 있는지 확인
         ws = sh.worksheet("diaries")
-        cell = ws.find(date, in_column=2)
-        if cell and ws.cell(cell.row, 1).value == username:
-            ws.update_cell(cell.row, 3, emotion)
-            ws.update_cell(cell.row, 4, text)
+        cell_list = ws.findall(date, in_column=2) # 날짜로 모두 찾기
+        
+        found_row = -1
+        for cell in cell_list:
+            if ws.cell(cell.row, 1).value == username:
+                found_row = cell.row
+                break
+        
+        if found_row != -1:
+            # 찾았으면 업데이트
+            ws.update_cell(found_row, 3, emotion)
+            ws.update_cell(found_row, 4, text)
         else:
+            # 없으면 새로 추가
             ws.append_row([username, date, emotion, text])
         return True
     except: return False
@@ -152,7 +164,7 @@ def get_spotify_client():
     except Exception as e:
         return f"Spotify 로그인 실패: {e}"
 
-# ⭐️⭐️⭐️ Spotify 로직 (잘 되던 "시장 제한 해제" 버전으로 교체) ⭐️⭐️⭐️
+# ⭐️ Spotify 로직 (잘 되던 "키워드" + "market=KR" 버전)
 def recommend_music(emotion):
     sp = get_spotify_client()
     if not isinstance(sp, spotipy.Spotify):
@@ -165,11 +177,11 @@ def recommend_music(emotion):
         "힘듦": ["위로 노래", "힐링 케이팝", "잔잔한 팝"],
         "놀람": ["파티 케이팝", "EDM 케이팝", "페스티벌 음악"],
     }
-    query = random.choice(KR_KEYWORDS.get(emotion, ["K-Pop"])) + " year:2010-2025 NOT children NOT nursery"
+    query = random.choice(KR_KEYWORDS.get(emotion, ["케이팝"])) + " year:2010-2025 NOT children"
 
     try:
-        # ⭐️ market="KR"을 삭제하여 글로벌 검색 허용
-        res = sp.search(q=query, type="track", limit=50)
+        # ⭐️ market="KR"을 다시 추가 (이게 핵심)
+        res = sp.search(q=query, type="track", limit=50, market="KR")
         tracks = (res.get("tracks") or {}).get("items") or []
         
         valid_candidates = []
@@ -181,16 +193,12 @@ def recommend_music(emotion):
 
         if not valid_candidates:
              return [{"error": "새로운 곡을 찾지 못했습니다."}]
-
-        # 중복 방지는 세션 상태가 아닌, 현재 검색 결과 내에서만 처리
-        seen = set(); unique_valid = []
+        
+        seen = set(); unique = []
         for v in valid_candidates:
-            if v['id'] not in seen:
-                unique_valid.append(v)
-                seen.add(v['id'])
-
-        return random.sample(unique_valid, k=min(3, len(unique_valid)))
-
+             if v['id'] not in seen: unique.append(v); seen.add(v['id'])
+        
+        return random.sample(unique, k=min(3, len(unique)))
     except Exception as e:
         return [{"error": f"Spotify 오류: {e}"}]
 
@@ -210,10 +218,14 @@ def recommend_movies(emotion):
     except Exception as e: return [{"text": f"TMDb 오류: {e}", "poster": None}]
 
 # =========================================
-# 🖥️ 5) 화면 구성 (로그인/달력/쓰기/결과)
+# 🖥️ 5) 화면 구성
 # =========================================
 if "logged_in" not in st.session_state: st.session_state.logged_in = False
 if "page" not in st.session_state: st.session_state.page = "login"
+if "diary_input" not in st.session_state: st.session_state.diary_input = ""
+if "final_emotion" not in st.session_state: st.session_state.final_emotion = None
+if "music_recs" not in st.session_state: st.session_state.music_recs = []
+if "movie_recs" not in st.session_state: st.session_state.movie_recs = []
 
 def login_page():
     st.title("MOODIARY 💖")
@@ -224,7 +236,7 @@ def login_page():
     with tab1:
         lid = st.text_input("아이디", key="lid")
         lpw = st.text_input("비밀번호", type="password", key="lpw")
-        if st.button("로그인", width='stretch'):
+        if st.button("로그인", width='stretch'): # ⭐️ use_container_width 수정
             users = get_all_users(sh)
             if lid in users and str(users[lid]) == str(lpw):
                 st.session_state.logged_in = True
@@ -235,7 +247,7 @@ def login_page():
     with tab2:
         nid = st.text_input("새 아이디", key="nid")
         npw = st.text_input("새 비밀번호 (4자리)", type="password", key="npw", max_chars=4)
-        if st.button("가입하기", width='stretch'):
+        if st.button("가입하기", width='stretch'): # ⭐️ use_container_width 수정
             users = get_all_users(sh)
             if nid in users: st.error("이미 있는 아이디입니다.")
             elif len(nid)<1 or len(npw)!=4: st.error("입력을 확인해주세요.")
@@ -264,6 +276,7 @@ def dashboard_page():
              custom_css=".fc-event-title { font-size: 2em !important; text-align: center; } .fc-bg-event { opacity: 0.6; }")
     st.write("")
 
+    # ⭐️⭐️⭐️ 신규 기능: 오늘 일기 유무에 따른 버튼 분리 ⭐️⭐️⭐️
     today_str = datetime.now().strftime("%Y-%m-%d")
     today_diary_exists = today_str in my_diaries
 
@@ -311,7 +324,7 @@ def result_page():
         st.markdown("#### 🎵 추천 음악")
         st.button("🔄 다른 음악", on_click=refresh_music, key="rm_btn", width='stretch')
         for item in st.session_state.music_recs:
-            if isinstance(item, dict) and item.get('id'):
+            if item.get('id'):
                 components.iframe(f"https://open.spotify.com/embed/track/{item['id']}?utm_source=generator", height=80)
             else: st.error(item.get("error", "로딩 실패"))
     with c2:
