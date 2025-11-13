@@ -157,67 +157,67 @@ def get_spotify_client():
     except Exception as e:
         return f"Spotify 로그인 실패: {e}"
 
-# ⭐️⭐️⭐️ [수정됨] recommend_music: 오류 추적 기능 강화 ⭐️⭐️⭐️
+# ⭐️⭐️⭐️ [핵심 수정] recommend_music: 404 오류 해결 (검색 기반) ⭐️⭐️⭐️
 def recommend_music(emotion):
     sp = get_spotify_client()
     if not isinstance(sp, spotipy.Spotify):
-        return [{"error": sp}] # Secrets 설정 오류 등을 여기서 반환
+        return [{"error": sp}] # ⭐️ Secrets 설정 오류 등을 여기서 반환
 
-    SAFE_PLAYLISTS = {
-        "행복": ["37i9dQZEVXbJxxNsEk86S4", "37i9dQZF1DXcBWIGoYBM5M"],
-        "슬픔": ["37i9dQZF1DXa29a0n9wGgC", "37i9dQZF1DX7qK8ma5wgG1"],
-        "분노": ["37i9dQZF1DXdfhOsjPtoaS", "37i9dQZF1DWWJOmJ7nRx0C"],
-        "힘듦": ["37i9dQZF1DXdls6m8FLMpo", "37i9dQZF1DWV7EzJMK2FUI"],
-        "놀람": ["37i9dQZEVXbJxxNsEk86S4", "37i9dQZF1DX4dyzvuaRJ0n"],
-        "중립": ["37i9dQZF1DWT9uTRZAYj0c"]
+    # (수정) 하드코딩된 ID 대신 감정별 '검색 키워드'를 사용합니다.
+    SEARCH_KEYWORDS = {
+        "행복": "happy hits",
+        "슬픔": "sad songs",
+        "분노": "anger management rock", # "workout" 등도 가능
+        "힘듦": "relaxing",
+        "놀람": "upbeat party",
+        "중립": "chill vibes"
     }
     
+    # 감정에 맞는 검색어 선택
+    query = SEARCH_KEYWORDS.get(emotion, "chill vibes")
+    
     try:
-        candidates = SAFE_PLAYLISTS.get(emotion, SAFE_PLAYLISTS["중립"])
-        random.shuffle(candidates)
+        # (수정) ID로 조회하는 대신 'playlist' 타입으로 '검색'합니다.
+        # 이것이 404 오류를 우회하는 핵심입니다.
+        results = sp.search(q=query, type="playlist", limit=10, market="KR")
+        playlists = results.get('playlists', {}).get('items', [])
         
-        valid_tracks = []
-        errors_encountered = [] # ⭐️ 오류를 기록할 리스트
+        if not playlists:
+            return [{"error": f"'{query}' 검색 결과 플레이리스트 없음"}]
 
-        for pid in candidates:
+        # (수정) 검색된 여러 플레이리스트에서 트랙을 수집
+        valid_tracks = []
+        random.shuffle(playlists) # 플레이리스트 순서를 섞음
+
+        for pl in playlists:
             try:
-                results = sp.playlist_items(pid, limit=30)
-                items = results.get('items', []) if results else []
-                
-                if not items:
-                    errors_encountered.append(f"플레이리스트 {pid}가 비어있음")
-                    continue
-                    
+                pid = pl['id']
+                # (수정) 이제 공개된 pid로 트랙을 가져옵니다.
+                tracks_results = sp.playlist_items(pid, limit=30)
+                items = tracks_results.get('items', []) if tracks_results else []
                 for it in items:
                     t = it.get('track')
                     if t and t.get('id') and t.get('name'):
-                        valid_tracks.append({"id": t['id'], "title": t['name']})
+                         valid_tracks.append({"id": t['id'], "title": t['name']})
                 
-                if len(valid_tracks) >= 5: break # ⭐️ 안쪽 루프 탈출
-            
+                if len(valid_tracks) >= 10: # 충분한 곡이 모이면 중단
+                    break
             except Exception as e:
-                errors_encountered.append(f"PID {pid} 로드 실패: {str(e)}") # ⭐️ 오류 메시지 기록
-                continue
-            
-            if len(valid_tracks) >= 5: break # ⭐️ 바깥쪽 루프 탈출
+                # 개별 플레이리스트 로드 실패는 무시 (권한 없는 ID 등)
+                continue 
 
-        if not valid_tracks:
-            if errors_encountered:
-                # ⭐️ 오류가 있었다면, 첫 번째 오류를 화면에 보여줌
-                return [{"error": f"API 오류: {errors_encountered[0]}"}]
-            else:
-                # ⭐️ 오류도 없는데 트랙이 없으면
-                return [{"error": "추천 곡을 찾지 못했습니다 (트랙 없음)."}]
-
-        # (기존 로직)
+        if not valid_tracks: 
+            return [{"error": "추천 곡을 찾지 못했습니다."}]
+        
+        # 중복 제거
         seen = set(); unique = []
         for v in valid_tracks:
-                if v['id'] not in seen: unique.append(v); seen.add(v['id'])
+            if v['id'] not in seen: unique.append(v); seen.add(v['id'])
+        
         return random.sample(unique, k=min(3, len(unique)))
     
-    except Exception as e:
-        # ⭐️ 함수 자체의 최상위 오류
-        return [{"error": f"Spotify 전체 오류: {e}"}]
+    except Exception as e: 
+        return [{"error": f"Spotify 검색 오류: {e}"}]
 
 def recommend_movies(emotion):
     key = st.secrets.get("tmdb", {}).get("api_key") or st.secrets.get("TMDB_API_KEY") or EMERGENCY_TMDB_KEY
@@ -338,7 +338,7 @@ def result_page():
         st.button("🔄 다른 음악", on_click=refresh_music, key="rm_btn", width='stretch')
         for item in st.session_state.music_recs:
             if item.get('id'):
-                # ⭐️⭐️⭐️ [수정됨] 올바른 스포티파이 임베드 URL로 변경 (SyntaxError 원인 제거) ⭐️⭐️⭐️
+                # (수정) 올바른 스포티파이 임베드 URL (공백 오류 수정됨)
                 components.iframe(f"https://open.spotify.com/embed/track/{item['id']}", height=80)
             else: 
                 st.error(item.get("error", "로딩 실패"))
