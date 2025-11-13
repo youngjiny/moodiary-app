@@ -313,8 +313,9 @@ def result_page():
         st.markdown("#### 🎵 추천 음악")
         st.button("🔄 다른 음악", on_click=refresh_music, key="rm_btn", width='stretch')
         for item in st.session_state.music_recs:
-            if item.get('id'):
-                components.iframe(f"https://open.spotify.com/embed/track/{item['id']}?utm_source=generator", height=80)
+           if item.get('id'):
+                # 올바른 스포티파이 임베드 URL로 변경합니다.
+                components.iframe(f"https://open.spotify.com/embed/track/{item['id']}", height=80)
             else: st.error(item.get("error", "로딩 실패"))
     with c2:
         st.markdown("#### 🎬 추천 영화")
@@ -372,3 +373,4 @@ if not st.session_state.logged_in: login_page()
 elif st.session_state.page == "dashboard": dashboard_page()
 elif st.session_state.page == "write": write_page()
 elif st.session_state.page == "result": result_page()
+
