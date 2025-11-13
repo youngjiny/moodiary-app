@@ -8,7 +8,7 @@ import time
 import streamlit.components.v1 as components
 import json
 import os
-from datetime import datetime
+from datetime import datetime, timezone, timedelta # ⭐️ [수정] timezone, timedelta 추가
 from streamlit_calendar import calendar
 import gspread
 from google.oauth2.service_account import Credentials
@@ -21,26 +21,29 @@ try:
 except ImportError:
     spotipy = None
     SpotifyClientCredentials = None
-    SPOTIPY_AVAILABLE = False # ⭐️ 라이브러리 설치 실패를 기억
+    SPOTIPY_AVAILABLE = False 
 
 # --- 2) 기본 설정 ---
 KOBERT_BASE_MODEL = "monologg/kobert"
 KOBERT_SAVED_REPO = "Young-jin/kobert-moodiary-app"
 TMDB_BASE_URL = "https://api.themoviedb.org/3"
-GSHEET_DB_NAME = "moodiary_db" # ⭐️ 구글 시트 파일 이름
+GSHEET_DB_NAME = "moodiary_db" 
 
 # 비상용 TMDB 키
 EMERGENCY_TMDB_KEY = "8587d6734fd278ecc05dcbe710c29f9c"
 
-# 감정별 테마 (색상, 이모지)
+# ⭐️ [수정] 감정별 테마 (색상 변경: 분노, 중립)
 EMOTION_META = {
-    "행복": {"color": "#FFD700", "emoji": "😆", "desc": "최고의 하루!"},
-    "슬픔": {"color": "#1E90FF", "emoji": "😭", "desc": "토닥토닥, 힘내요."},
-    "분노": {"color": "#FF4500", "emoji": "🤬", "desc": "워워, 진정해요."},
-    "힘듦": {"color": "#808080", "emoji": "🤯", "desc": "휴식이 필요해."},
-    "놀람": {"color": "#8A2BE2", "emoji": "😱", "desc": "깜짝 놀랐군요!"},
-    "중립": {"color": "#A9A9A9", "emoji": "😐", "desc": "평온한 하루."}
+    "행복": {"color": "#FFD700", "emoji": "😆", "desc": "최고의 하루!"},       # 노랑
+    "슬픔": {"color": "#1E90FF", "emoji": "😭", "desc": "토닥토닥, 힘내요."},     # 파랑
+    "분노": {"color": "#FF0000", "emoji": "🤬", "desc": "워워, 진정해요."},       # ⭐️ 빨강
+    "힘듦": {"color": "#808080", "emoji": "🤯", "desc": "휴식이 필요해."},     # 회색
+    "놀람": {"color": "#8A2BE2", "emoji": "😱", "desc": "깜짝 놀랐군요!"},     # 보라
+    "중립": {"color": "#363636", "emoji": "😐", "desc": "평온한 하루."}        # ⭐️ 어두운 회색 (검정)
 }
+
+# ⭐️ [추가] 대한민국 표준시(KST) 정의 (UTC+9)
+KST = timezone(timedelta(hours=9))
 
 st.set_page_config(layout="wide", page_title="MOODIARY")
 
@@ -63,14 +66,13 @@ def init_db():
     try:
         sh = client.open(GSHEET_DB_NAME)
     except:
-        return None # (시트가 없으면 None 반환)
+        return None 
 
-    # 유저/일기 시트가 있는지 확인
     try:
         sh.worksheet("users")
         sh.worksheet("diaries")
     except:
-        return None # (시트가 깨져있으면 None 반환)
+        return None 
     return sh
 
 def get_all_users(sh):
@@ -87,11 +89,9 @@ def add_user(sh, username, password):
         return True
     except: return False
 
-# ⭐️⭐️⭐️ [핵심 수정] get_user_diaries: 오타 수정 ⭐️⭐️⭐️
 def get_user_diaries(sh, username):
     if not sh: return {}
     try:
-        # ⭐️ 오타 수정: sh.worksksheet -> sh.worksheet
         rows = sh.worksheet("diaries").get_all_records()
         user_diaries = {}
         for row in rows:
@@ -103,15 +103,12 @@ def get_user_diaries(sh, username):
 def add_diary(sh, username, date, emotion, text):
     if not sh: return False
     try:
-        # ⭐️ 이미 해당 날짜에 일기가 있는지 확인
         ws = sh.worksheet("diaries")
         cell = ws.find(date, in_column=2)
         if cell and ws.cell(cell.row, 1).value == username:
-            # 찾았으면 업데이트
             ws.update_cell(cell.row, 3, emotion)
             ws.update_cell(cell.row, 4, text)
         else:
-            # 없으면 새로 추가
             ws.append_row([username, date, emotion, text])
         return True
     except: return False
@@ -152,8 +149,8 @@ def get_spotify_client():
         creds = st.secrets["spotify"]
         manager = SpotifyClientCredentials(client_id=creds["client_id"], client_secret=creds["client_secret"])
         sp = spotipy.Spotify(client_credentials_manager=manager, retries=3, backoff_factor=0.3)
-        sp.search(q="test", limit=1) # ⭐️ 로그인 테스트
-        return sp # ⭐️ 성공
+        sp.search(q="test", limit=1)
+        return sp
     except KeyError:
         return "Spotify Secrets 설정이 없습니다."
     except Exception as e:
@@ -271,13 +268,11 @@ def dashboard_page():
     st.divider()
 
     sh = init_db()
-    # ⭐️ 이제 get_user_diaries가 오타 없이 정상 작동합니다.
     my_diaries = get_user_diaries(sh, st.session_state.username)
     events = []
     for date_str, data in my_diaries.items():
         emo = data.get("emotion", "중립")
         meta = EMOTION_META.get(emo, EMOTION_META["중립"])
-        # ⭐️ 하나의 이벤트로 통합 (배경색 + 이모티콘)
         events.append({
             "title": meta["emoji"], 
             "start": date_str, 
@@ -287,17 +282,18 @@ def dashboard_page():
             "textColor": "#000000"
         })
 
-    # (이전과 동일) 달력 CSS (색깔 + 중앙 정렬)
+    # ⭐️ [수정] 달력 CSS (이모티콘 위로 10px 이동)
     calendar(events=events, options={"headerToolbar": {"left": "prev,next today", "center": "title", "right": ""}, "initialView": "dayGridMonth"}, 
              custom_css="""
              /* 1. 이모티콘 (타이틀) 스타일 */
              .fc-event-title {
-                 font-size: 3em !important;    /* 이모티콘 크기 */
+                 font-size: 3em !important;
                  display: flex;
-                 justify-content: center; /* 가로 중앙 */
-                 align-items: center;     /* 세로 중앙 */
-                 height: 100%;            /* 부모(이벤트) 높이 100% */
+                 justify-content: center;
+                 align-items: center;
+                 height: 100%;
                  line-height: 1;
+                 transform: translateY(-10px); /* ⭐️ [수정] 10px 위로 이동 */
              }
  
              /* 2. 이벤트 자체의 스타일 (이모티콘 감싸는 래퍼) */
@@ -306,47 +302,45 @@ def dashboard_page():
                  margin: 0 !important;
                  border: none !important;
                  color: black !important;
-                 /* ⭐️ [수정] 투명 배경색 제거 -> 이제 이벤트에 설정된 배경색이 보입니다 */
-                 
-                 /* ⭐️ [추가] 이벤트가 셀을 꽉 채우도록 높이/너비 100% */
                  height: 100%;
                  width: 100%;
              }
  
              /* 3. 날짜 셀 '전체 프레임' 스타일 */
              .fc-daygrid-day-frame {
-                 height: 100%; /* ⭐️ [추가] 셀 높이를 100%로 설정 */
+                 height: 100%;
                  display: flex;
                  flex-direction: column;
-                 justify-content: center; /* 세로 중앙 정렬 */
-                 align-items: center; /* 가로 중앙 정렬 */
-                 position: relative; /* ⭐️ 날짜 숫자 위치 기준 */
+                 justify-content: center;
+                 align-items: center;
+                 position: relative;
              }
  
              /* 4. 날짜 숫자 스타일 (오른쪽 상단 절대 위치) */
              .fc-daygrid-day-number {
-                  position: absolute !important; /* ⭐️ 절대 위치로 변경 */
+                  position: absolute !important;
                   top: 5px;
                   right: 5px;
                   font-size: 0.8em;
                   color: black;
-                  z-index: 2; /* ⭐️ 배경색/이벤트보다 위에 표시 */
+                  z-index: 2;
              }
              
              /* 5. 날짜 셀의 '컨텐츠 영역' 스타일 (날짜 숫자 제외) */
              .fc-daygrid-day-top {
-                flex-grow: 1; /* ⭐️ 날짜 숫자 제외한 나머지 공간 모두 차지 */
+                flex-grow: 1;
                 display: flex;
                 flex-direction: column;
-                justify-content: center; /* 세로 중앙 */
-                align-items: center;     /* 가로 중앙 */
-                width: 100%; /* ⭐️ 너비 100% */
+                justify-content: center;
+                align-items: center;
+                width: 100%;
              }
              """
              )
     st.write("")
 
-    today_str = datetime.now().strftime("%Y-%m-%d")
+    # ⭐️ [수정] 오늘 날짜를 KST 기준으로 가져옴
+    today_str = datetime.now(KST).strftime("%Y-%m-%d")
     today_diary_exists = today_str in my_diaries
 
     if today_diary_exists:
@@ -394,7 +388,6 @@ def result_page():
         st.button("🔄 다른 음악", on_click=refresh_music, key="rm_btn", width='stretch')
         for item in st.session_state.music_recs:
             if item.get('id'):
-                # 스포티파이 iframe 크기 (이전과 동일)
                 components.iframe(f"https://open.spotify.com/embed/track/{item['id']}", height=250, width="100%") 
             else: 
                 st.error(item.get("error", "로딩 실패"))
@@ -406,7 +399,7 @@ def result_page():
                 ic, tc = st.columns([1, 2])
                 ic.image(item['poster'], use_container_width=True)
                 tc.markdown(f"**{item['title']} ({item['year']})**\n⭐ {item['rating']:.1f}\n\n*{item.get('overview','')[:100]}...*")
-            else: st.error(item.get("text", "Loding fail"))
+            else: st.error(item.get("text", "로딩 실패"))
 
 def write_page():
     st.title("오늘의 이야기 📝")
@@ -430,7 +423,8 @@ def write_page():
             st.session_state.movie_recs = recommend_movies(emo)
             
             sh = init_db()
-            today = datetime.now().strftime("%Y-%m-%d")
+            # ⭐️ [수정] 오늘 날짜를 KST 기준으로 가져옴
+            today = datetime.now(KST).strftime("%Y-%m-%d")
             add_diary(sh, st.session_state.username, today, emo, txt)
             
             st.session_state.page = "result"
