@@ -51,7 +51,7 @@ st.set_page_config(layout="wide", page_title="MOODIARY")
 def get_gsheets_client():
     try:
         creds = st.secrets["connections"]["gsheets"]
-        scope = ['https.www.googleapis.com/auth/spreadsheets', 'https://www.googleapis.com/auth/drive']
+        scope = ['https://www.googleapis.com/auth/spreadsheets', 'https://www.googleapis.com/auth/drive']
         credentials = Credentials.from_service_account_info(creds, scopes=scope)
         return gspread.authorize(credentials)
     except Exception as e:
@@ -103,18 +103,11 @@ def add_diary(sh, username, date, emotion, text):
     try:
         # ⭐️ 이미 해당 날짜에 일기가 있는지 확인
         ws = sh.worksheet("diaries")
-        cell_list = ws.findall(date, in_column=2) # 날짜로 모두 찾기
-        
-        found_row = -1
-        for cell in cell_list:
-            if ws.cell(cell.row, 1).value == username:
-                found_row = cell.row
-                break
-        
-        if found_row != -1:
+        cell = ws.find(date, in_column=2)
+        if cell and ws.cell(cell.row, 1).value == username:
             # 찾았으면 업데이트
-            ws.update_cell(found_row, 3, emotion)
-            ws.update_cell(found_row, 4, text)
+            ws.update_cell(cell.row, 3, emotion)
+            ws.update_cell(cell.row, 4, text)
         else:
             # 없으면 새로 추가
             ws.append_row([username, date, emotion, text])
@@ -157,50 +150,50 @@ def get_spotify_client():
         creds = st.secrets["spotify"]
         manager = SpotifyClientCredentials(client_id=creds["client_id"], client_secret=creds["client_secret"])
         sp = spotipy.Spotify(client_credentials_manager=manager, retries=3, backoff_factor=0.3)
-        sp.search(q="test", limit=1)
-        return sp 
+        sp.search(q="test", limit=1) # ⭐️ 로그인 테스트
+        return sp # ⭐️ 성공
     except KeyError:
         return "Spotify Secrets 설정이 없습니다."
     except Exception as e:
         return f"Spotify 로그인 실패: {e}"
 
-# ⭐️ Spotify 로직 (잘 되던 "키워드" + "market=KR" 버전)
+# ⭐️ Spotify 로직 (강력한 안전장치)
 def recommend_music(emotion):
     sp = get_spotify_client()
     if not isinstance(sp, spotipy.Spotify):
-        return [{"error": sp}] 
-
-    KR_KEYWORDS = {
-        "행복": ["여행", "행복", "케이팝 최신", "여름 노래"],
-        "슬픔": ["발라드 최신", "이별 노래", "감성 케이팝", "K-ballad"],
-        "분노": ["인기 밴드", "팝송", "스트레스", "재즈"],
-        "힘듦": ["위로 노래", "힐링 케이팝", "잔잔한 팝"],
-        "놀람": ["파티 케이팝", "EDM 케이팝", "페스티벌 음악"],
+        return [{"error": sp}] # ⭐️ 오류 메시지 반환
+    
+    SAFE_PLAYLISTS = {
+        "행복": ["37i9dQZEVXbJxxNsEk86S4", "37i9dQZF1DXcBWIGoYBM5M"],
+        "슬픔": ["37i9dQZF1DXa29a0n9wGgC", "37i9dQZF1DX7qK8ma5wgG1"],
+        "분노": ["37i9dQZF1DXdfhOsjPtoaS", "37i9dQZF1DWWJOmJ7nRx0C"],
+        "힘듦": ["37i9dQZF1DXdls6m8FLMpo", "37i9dQZF1DWV7EzJMK2FUI"],
+        "놀람": ["37i9dQZEVXbJxxNsEk86S4", "37i9dQZF1DX4dyzvuaRJ0n"],
+        "중립": ["37i9dQZF1DWT9uTRZAYj0c"]
     }
-    query = random.choice(KR_KEYWORDS.get(emotion, ["케이팝"])) + " year:2010-2025 NOT children"
-
+    
     try:
-        # ⭐️ market="KR"을 다시 추가 (이게 핵심)
-        res = sp.search(q=query, type="track", limit=50, market="KR")
-        tracks = (res.get("tracks") or {}).get("items") or []
+        candidates = SAFE_PLAYLISTS.get(emotion, SAFE_PLAYLISTS["중립"])
+        random.shuffle(candidates)
         
-        valid_candidates = []
-        for t in tracks:
-            tid = t.get("id")
-            name = t.get("name")
-            if tid and name:
-                valid_candidates.append({"id": tid, "title": name})
+        valid_tracks = []
+        for pid in candidates:
+            try:
+                results = sp.playlist_items(pid, limit=30)
+                items = results.get('items', []) if results else []
+                for it in items:
+                    t = it.get('track')
+                    if t and t.get('id') and t.get('name'):
+                         valid_tracks.append({"id": t['id'], "title": t['name']})
+                if len(valid_tracks) >= 5: break
+            except: continue
 
-        if not valid_candidates:
-             return [{"error": "새로운 곡을 찾지 못했습니다."}]
-        
+        if not valid_tracks: return [{"error": "추천 곡을 찾지 못했습니다."}]
         seen = set(); unique = []
-        for v in valid_candidates:
+        for v in valid_tracks:
              if v['id'] not in seen: unique.append(v); seen.add(v['id'])
-        
         return random.sample(unique, k=min(3, len(unique)))
-    except Exception as e:
-        return [{"error": f"Spotify 오류: {e}"}]
+    except Exception as e: return [{"error": f"Spotify 오류: {e}"}]
 
 def recommend_movies(emotion):
     key = st.secrets.get("tmdb", {}).get("api_key") or st.secrets.get("TMDB_API_KEY") or EMERGENCY_TMDB_KEY
@@ -222,10 +215,6 @@ def recommend_movies(emotion):
 # =========================================
 if "logged_in" not in st.session_state: st.session_state.logged_in = False
 if "page" not in st.session_state: st.session_state.page = "login"
-if "diary_input" not in st.session_state: st.session_state.diary_input = ""
-if "final_emotion" not in st.session_state: st.session_state.final_emotion = None
-if "music_recs" not in st.session_state: st.session_state.music_recs = []
-if "movie_recs" not in st.session_state: st.session_state.movie_recs = []
 
 def login_page():
     st.title("MOODIARY 💖")
@@ -236,7 +225,7 @@ def login_page():
     with tab1:
         lid = st.text_input("아이디", key="lid")
         lpw = st.text_input("비밀번호", type="password", key="lpw")
-        if st.button("로그인", width='stretch'): # ⭐️ use_container_width 수정
+        if st.button("로그인", width='stretch'):
             users = get_all_users(sh)
             if lid in users and str(users[lid]) == str(lpw):
                 st.session_state.logged_in = True
@@ -247,7 +236,7 @@ def login_page():
     with tab2:
         nid = st.text_input("새 아이디", key="nid")
         npw = st.text_input("새 비밀번호 (4자리)", type="password", key="npw", max_chars=4)
-        if st.button("가입하기", width='stretch'): # ⭐️ use_container_width 수정
+        if st.button("가입하기", width='stretch'):
             users = get_all_users(sh)
             if nid in users: st.error("이미 있는 아이디입니다.")
             elif len(nid)<1 or len(npw)!=4: st.error("입력을 확인해주세요.")
