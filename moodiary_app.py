@@ -13,7 +13,7 @@ from streamlit_calendar import calendar
 import gspread
 from google.oauth2.service_account import Credentials
 import pandas as pd
-# ⭐️ [수정] Altair 임포트 삭제
+# ⭐️ [수정] Altair 대신 Streamlit의 기본 vega_lite_chart를 사용합니다.
 
 # (선택) Spotify SDK
 try:
@@ -333,7 +333,7 @@ def dashboard_page():
                  )
         st.write("")
 
-    # ⭐️⭐️⭐️ [핵심 수정] '이달의 통계' 탭: st.bar_chart로 변경 ⭐️⭐️⭐️
+    # ⭐️⭐️⭐️ [핵심 수정] '이달의 통계' 탭: st.vega_lite_chart로 변경 ⭐️⭐️⭐️
     with tab2:
         today = datetime.now(KST)
         st.subheader(f"{today.month}월의 감정 통계")
@@ -349,21 +349,54 @@ def dashboard_page():
         df = pd.DataFrame(month_emotions, columns=['emotion'])
         emotion_counts = df['emotion'].value_counts().reindex(EMOTION_META.keys(), fill_value=0)
             
-        # 2. ⭐️ [수정] st.bar_chart 용 데이터프레임으로 변환
+        # 2. 차트용 데이터프레임으로 변환
         chart_data = emotion_counts.reset_index()
         chart_data.columns = ['emotion', 'count']
-        
-        # 3. ⭐️ [수정] 차트에 사용할 "옅은 색상"을 'color' 열로 추가
-        chart_data['color'] = chart_data['emotion'].map(lambda e: EMOTION_META[e]['color'])
 
-        # 4. ⭐️ [수정] st.bar_chart로 차트 생성 (x, y, color 지정)
-        st.bar_chart(
-            chart_data,
-            x='emotion',
-            y='count',
-            color='color', # ⭐️ 이 부분이 색상을 적용합니다.
-            use_container_width=True
-        )
+        # 3. 옅은 색상 (RGBA) 매핑
+        domain = list(EMOTION_META.keys())
+        range_ = [meta['color'] for meta in EMOTION_META.values()] # 옅은 rgba 색상
+
+        # 4. ⭐️ [수정] st.vega_lite_chart로 차트 생성 (모든 문제 해결)
+        st.vega_lite_chart(chart_data, {
+            "title": f"{today.month}월의 감정 분포",
+            "width": "container", # 컨테이너 너비에 맞춤
+            "mark": {
+                "type": "bar", 
+                "cornerRadius": 5, 
+                "opacity": 1.0 # ⭐️ 색상 자체가 옅으므로 1.0 (불투명)
+            },
+            "encoding": {
+                # ⭐️ X축: 글자 수평 정렬 (눕지 않게)
+                "x": {
+                    "field": "emotion", 
+                    "type": "nominal", # 범주형
+                    "sort": domain, 
+                    "title": "감정",
+                    "axis": {"labelAngle": 0} 
+                },
+                # ⭐️ Y축: 0부터 시작 (음수 방지)
+                "y": {
+                    "field": "count", 
+                    "type": "quantitative", # 수량형
+                    "title": "횟수",
+                    "scale": {"zero": True},
+                    "axis": {"format": "d", "tickMinStep": 1}
+                },
+                # ⭐️ 색상: 옅은 색상 매핑 + 범례(rgba 문자열) 숨기기
+                "color": {
+                    "field": "emotion",
+                    "type": "nominal",
+                    "scale": {"domain": domain, "range": range_},
+                    "legend": None 
+                },
+                # 툴팁
+                "tooltip": [
+                    {"field": "emotion", "title": "감정"},
+                    {"field": "count", "title": "횟수"}
+                ]
+            }
+        }, use_container_width=True)
         
         # 5. 텍스트로 횟수 표시
         st.write("---")
