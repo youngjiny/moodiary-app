@@ -12,6 +12,7 @@ from datetime import datetime, timezone, timedelta # KST
 from streamlit_calendar import calendar
 import gspread
 from google.oauth2.service_account import Credentials
+import pandas as pd # ⭐️ [추가] 통계 기능을 위한 pandas 임포트
 
 # (선택) Spotify SDK
 try:
@@ -32,7 +33,7 @@ GSHEET_DB_NAME = "moodiary_db"
 # 비상용 TMDB 키
 EMERGENCY_TMDB_KEY = "8587d6734fd278ecc05dcbe710c29f9c"
 
-# ⭐️ [수정] 감정별 테마 (색상 RGBA로 옅게 조정)
+# 감정별 테마 (색상 RGBA로 옅게 조정)
 EMOTION_META = {
     "행복": {"color": "rgba(255, 215, 0, 0.4)", "emoji": "😆", "desc": "최고의 하루!"}, # 노랑 (40% 불투명)
     "슬픔": {"color": "rgba(30, 144, 255, 0.4)", "emoji": "😭", "desc": "토닥토닥, 힘내요."}, # 파랑 (40% 불투명)
@@ -259,6 +260,7 @@ def login_page():
                 if add_user(sh, nid, npw): st.success("가입 성공! 로그인해주세요.")
                 else: st.error("가입 실패 (DB 오류)")
 
+# ⭐️⭐️⭐️ [핵심 수정] dashboard_page: 탭 기능 추가 ⭐️⭐️⭐️
 def dashboard_page():
     st.title(f"{st.session_state.username}님의 감정 달력 📅")
     
@@ -269,95 +271,109 @@ def dashboard_page():
 
     sh = init_db()
     my_diaries = get_user_diaries(sh, st.session_state.username)
-    events = []
     
-    for date_str, data in my_diaries.items():
-        emo = data.get("emotion", "중립")
-        meta = EMOTION_META.get(emo, EMOTION_META["중립"])
-        
-        # 1. 배경색 이벤트 (칸 전체 채우기 용)
-        events.append({
-            "start": date_str, 
-            "display": "background", 
-            "backgroundColor": meta["color"]
-        })
-        
-        # 2. 이모티콘 이벤트 (배경색 없음)
-        events.append({
-            "title": meta["emoji"], 
-            "start": date_str, 
-            "allDay": True,
-            "backgroundColor": "transparent",
-            "borderColor": "transparent",
-            "textColor": "#000000"
-        })
+    # ⭐️ [추가] 탭 생성
+    tab1, tab2 = st.tabs(["📅 감정 달력", "📊 이달의 통계"])
 
-    # ⭐️ [수정] 달력 CSS (이모티콘 위치, 날짜 숫자 Z-index, 이모티콘 그림자) ⭐️
-    calendar(events=events, options={"headerToolbar": {"left": "prev,next today", "center": "title", "right": ""}, "initialView": "dayGridMonth"}, 
-             custom_css="""
-             /* 1. 이모티콘 (타이틀) 스타일 */
-             .fc-event-title {
-                 font-size: 3em !important;
-                 display: flex;
-                 justify-content: center;
-                 align-items: center;
-                 height: 100%;
-                 line-height: 1;
-                 /* ⭐️ [수정] 25px 위로 이동 (이모티콘 위치 조정) */
-                 transform: translateY(-25px); 
-                 /* ⭐️ [추가] 이모티콘에 미세한 그림자 추가하여 가독성 향상 */
-                 text-shadow: 1px 1px 2px rgba(0,0,0,0.2); 
-             }
- 
-             /* 2. 이모티콘 '이벤트' 스타일 (투명) */
-             .fc-daygrid-event {
-                 padding: 0 !important;
-                 margin: 0 !important;
-                 border: none !important;
-                 color: black !important;
-                 background-color: transparent !important; 
-             }
- 
-             /* 3. 날짜 셀 '전체 프레임' 스타일 (중앙 정렬 기준) */
-             .fc-daygrid-day-frame {
-                 height: 100%;
-                 display: flex;
-                 flex-direction: column;
-                 justify-content: center;
-                 align-items: center;
-                 position: relative;
-             }
- 
-             /* 4. 날짜 숫자 스타일 (오른쪽 상단) */
-             .fc-daygrid-day-number {
-                  position: absolute !important;
-                  top: 5px;
-                  right: 5px;
-                  font-size: 0.8em;
-                  color: black; /* ⭐️ [수정] 날짜 숫자는 항상 검정색으로 유지 */
-                  /* ⭐️ [수정] z-index를 높여 배경색 위에 보이도록 */
-                  z-index: 10 !important; 
-                  text-shadow: 1px 1px 2px rgba(255,255,255,0.5); /* ⭐️ [추가] 흰색 그림자로 대비 향상 */
-             }
-             
-             /* 5. 날짜 셀 '컨텐츠 영역' 스타일 (이모티콘 배치 영역) */
-             .fc-daygrid-day-top {
-                flex-grow: 1;
-                display: flex;
-                flex-direction: column;
-                justify-content: center;
-                align-items: center;
-                width: 100%;
-             }
-             
-             /* 6. 배경 이벤트의 투명도를 100%로 설정 (위에 RGBA로 이미 투명도 조절) */
-             .fc-bg-event {
-                 opacity: 1.0 !important; 
-             }
-             """
-             )
-    st.write("")
+    with tab1:
+        # ⭐️ [이동] 기존 달력 로직
+        events = []
+        for date_str, data in my_diaries.items():
+            emo = data.get("emotion", "중립")
+            meta = EMOTION_META.get(emo, EMOTION_META["중립"])
+            events.append({"start": date_str, "display": "background", "backgroundColor": meta["color"]})
+            events.append({"title": meta["emoji"], "start": date_str, "allDay": True, "backgroundColor": "transparent", "borderColor": "transparent", "textColor": "#000000"})
 
+        calendar(events=events, options={"headerToolbar": {"left": "prev,next today", "center": "title", "right": ""}, "initialView": "dayGridMonth"}, 
+                 custom_css="""
+                 .fc-event-title {
+                     font-size: 3em !important;
+                     display: flex;
+                     justify-content: center;
+                     align-items: center;
+                     height: 100%;
+                     line-height: 1;
+                     transform: translateY(-25px); 
+                     text-shadow: 1px 1px 2px rgba(0,0,0,0.2); 
+                 }
+                 .fc-daygrid-event {
+                     padding: 0 !important;
+                     margin: 0 !important;
+                     border: none !important;
+                     color: black !important;
+                     background-color: transparent !important; 
+                 }
+                 .fc-daygrid-day-frame {
+                     height: 100%;
+                     display: flex;
+                     flex-direction: column;
+                     justify-content: center;
+                     align-items: center;
+                     position: relative;
+                 }
+                 .fc-daygrid-day-number {
+                      position: absolute !important;
+                      top: 5px;
+                      right: 5px;
+                      font-size: 0.8em;
+                      color: black;
+                      z-index: 10 !important; 
+                      text-shadow: 1px 1px 2px rgba(255,255,255,0.5);
+                 }
+                 .fc-daygrid-day-top {
+                    flex-grow: 1;
+                    display: flex;
+                    flex-direction: column;
+                    justify-content: center;
+                    align-items: center;
+                    width: 100%;
+                 }
+                 .fc-bg-event {
+                     opacity: 1.0 !important; 
+                 }
+                 """
+                 )
+        st.write("")
+
+    with tab2:
+        # ⭐️ [신규] '이달의 통계' 로직
+        st.subheader(f"{datetime.now(KST).month}월의 감정 통계")
+        
+        today = datetime.now(KST)
+        current_month_str = today.strftime("%Y-%m")
+        
+        # 1. 이번 달 일기만 필터링
+        month_emotions = []
+        for date_str, data in my_diaries.items():
+            if date_str.startswith(current_month_str):
+                month_emotions.append(data.get('emotion', '중립'))
+        
+        # 2. 통계 생성
+        if not month_emotions:
+            st.info("이번 달에 작성된 일기가 아직 없습니다.")
+        else:
+            # Pandas를 사용하여 감정 횟수 계산
+            df = pd.DataFrame(month_emotions, columns=['emotion'])
+            # .reindex()를 사용해 모든 감정 순서대로 정렬, fill_value=0으로 없는 감정 0 처리
+            emotion_counts = df['emotion'].value_counts().reindex(EMOTION_META.keys(), fill_value=0)
+            # 0회인 감정은 차트에서 제외
+            emotion_counts = emotion_counts[emotion_counts > 0]
+
+            if emotion_counts.empty:
+                st.info("이번 달에 작성된 일기가 아직 없습니다.")
+            else:
+                # 3. 막대 차트 표시
+                st.bar_chart(emotion_counts)
+                
+                # 4. 텍스트로 횟수 표시
+                st.write("---")
+                st.write("감정별 횟수:")
+                for emo, count in emotion_counts.items():
+                    if count > 0:
+                        st.write(f"{EMOTION_META[emo]['emoji']} {emo}: {count}회")
+
+    # ⭐️ [위치] '오늘 일기' 버튼은 탭 밖에 위치
+    st.divider() # 탭과 버튼 사이에 구분선 추가
     today_str = datetime.now(KST).strftime("%Y-%m-%d")
     today_diary_exists = today_str in my_diaries
 
