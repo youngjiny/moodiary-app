@@ -264,7 +264,6 @@ def dashboard_page():
     
     legend_cols = st.columns(6)
     for i, (emo, meta) in enumerate(EMOTION_META.items()):
-        # ⭐️ [수정] 범례 색상도 rgba로 맞춰서 표시
         legend_cols[i].markdown(f"<span style='color:{meta['color']}; font-size: 1.2em;'>●</span> {emo}", unsafe_allow_html=True)
     st.divider()
 
@@ -290,7 +289,7 @@ def dashboard_page():
             "allDay": True,
             "backgroundColor": "transparent",
             "borderColor": "transparent",
-            "textColor": "#000000" # 이모티콘 색상은 검정색으로 유지 (배경과 대비)
+            "textColor": "#000000"
         })
 
     # ⭐️ [수정] 달력 CSS (이모티콘 위치, 날짜 숫자 Z-index, 이모티콘 그림자) ⭐️
@@ -466,4 +465,3 @@ if not st.session_state.logged_in: login_page()
 elif st.session_state.page == "dashboard": dashboard_page()
 elif st.session_state.page == "write": write_page()
 elif st.session_state.page == "result": result_page()
-```http://googleusercontent.com/image_generation_content/1
