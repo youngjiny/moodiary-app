@@ -345,44 +345,33 @@ def dashboard_page():
             if date_str.startswith(current_month_str):
                 month_emotions.append(data.get('emotion', '중립'))
         
-        # ⭐️ [수정] 1. if/else 로직을 하나로 통합 (안정성)
-        # 일기가 없으면 빈 리스트로 df가 생성되고, value_counts()는 비어있게 됨
+        # 1. Pandas로 감정 횟수 계산 (0회 포함)
         df = pd.DataFrame(month_emotions, columns=['emotion'])
-        # reindex()가 비어있는 값에 fill_value=0을 채워 6개 감정 모두 0으로 표시
         emotion_counts = df['emotion'].value_counts().reindex(EMOTION_META.keys(), fill_value=0)
             
         # 2. Altair 차트용 데이터프레임으로 변환
         chart_data = emotion_counts.reset_index()
-        chart_data.columns = ['emotion', 'count'] # 컬럼 이름 명시
+        chart_data.columns = ['emotion', 'count']
 
-        # 3. 차트에 사용할 원본 색상 정의
-        chart_colors = {
-            "행복": "#FFD700",
-            "슬픔": "#1E90FF",
-            "분노": "#FF0000",
-            "힘듦": "#808080",
-            "놀람": "#8A2BE2",
-            "중립": "#363636"
-        }
-        
-        # 4. 색상 매핑 순서 정의
-        domain = list(chart_colors.keys())
-        range_ = list(chart_colors.values())
+        # 3. ⭐️ [수정] 차트에 사용할 옅은 색상 (EMOTION_META)
+        domain = list(EMOTION_META.keys())
+        range_ = [meta['color'] for meta in EMOTION_META.values()] # 옅은 rgba 색상 사용
 
-        # 5. Altair 차트 생성
+        # 4. Altair 차트 생성
         chart = alt.Chart(chart_data).mark_bar(
             cornerRadius=5, 
-            opacity=0.8      
+            # ⭐️ [수정] 옅은 rgba 색상을 사용하므로, opacity는 1.0(불투명)으로 설정
+            opacity=1.0      
         ).encode(
             # X축: 감정 (글자 가로 표시)
             x=alt.X('emotion', sort=domain, title='감정', axis=alt.Axis(labelAngle=0)),
             
-            # ⭐️ [수정] Y축의 최소값을 0으로 고정 (음수 방지)
-            y=alt.Y('count', title='횟수', 
+            # ⭐️ [수정] :Q (숫자) 명시 + Y축 최소값 0 고정
+            y=alt.Y('count:Q', title='횟수', 
                     axis=alt.Axis(format='d', tickMinStep=1), 
                     scale=alt.Scale(domainMin=0)),
             
-            # 색상: 감정별로 매핑
+            # 색상: 감정별로 매핑 (옅은 색상)
             color=alt.Color('emotion', 
                             legend=None, 
                             scale=alt.Scale(domain=domain, range=range_)),
@@ -392,10 +381,10 @@ def dashboard_page():
             title=f'{today.month}월의 감정 분포' 
         ).interactive() 
 
-        # 6. 차트 표시
+        # 5. 차트 표시
         st.altair_chart(chart, use_container_width=True)
         
-        # 7. 텍스트로 횟수 표시
+        # 6. 텍스트로 횟수 표시
         st.write("---")
         st.write("감정별 횟수:")
         for emo, count in emotion_counts.items():
