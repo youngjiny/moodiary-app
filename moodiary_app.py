@@ -13,13 +13,19 @@ from streamlit_calendar import calendar
 import gspread
 from google.oauth2.service_account import Credentials
 
+# (선택) Spotify SDK
+try:
+    import spotipy
+    from spotipy.oauth2 import SpotifyClientCredentials
+except Exception:
+    spotipy = None
+    SpotifyClientCredentials = None
+
 # --- 2) 기본 설정 ---
 KOBERT_BASE_MODEL = "monologg/kobert"
 KOBERT_SAVED_REPO = "Young-jin/kobert-moodiary-app"
 TMDB_BASE_URL = "https://api.themoviedb.org/3"
-
-# ⭐️ 구글 시트 파일 이름
-GSHEET_DB_NAME = "moodiary_db"
+GSHEET_DB_NAME = "moodiary_db" # ⭐️ 구글 시트 파일 이름
 
 # 비상용 TMDB 키
 EMERGENCY_TMDB_KEY = "8587d6734fd278ecc05dcbe710c29f9c"
@@ -47,30 +53,23 @@ def get_gsheets_client():
         credentials = Credentials.from_service_account_info(creds, scopes=scope)
         return gspread.authorize(credentials)
     except Exception as e:
-        st.error(f"구글 시트 연결 실패: {e}")
+        # st.error(f"구글 시트 연결 실패: {e}")
         return None
 
 def init_db():
-    """DB 시트가 없으면 만들고 초기화"""
     client = get_gsheets_client()
     if not client: return None
     try:
         sh = client.open(GSHEET_DB_NAME)
-    except gspread.exceptions.SpreadsheetNotFound:
-        st.error(f"'{GSHEET_DB_NAME}' 스프레드시트를 찾을 수 없습니다. 구글 드라이브에서 만들고 공유해주세요.")
-        return None
-
-    # 유저 시트 확인
-    try: sh.worksheet("users")
     except:
-        ws = sh.add_worksheet("users", 100, 2)
-        ws.append_row(["username", "password"])
+        return None # (시트가 없으면 None 반환)
 
-    # 일기 시트 확인
-    try: sh.worksheet("diaries")
+    # 유저/일기 시트가 있는지 확인
+    try:
+        sh.worksheet("users")
+        sh.worksheet("diaries")
     except:
-        ws = sh.add_worksheet("diaries", 1000, 4)
-        ws.append_row(["username", "date", "emotion", "text"])
+        return None # (시트가 깨져있으면 None 반환)
     return sh
 
 def get_all_users(sh):
@@ -94,7 +93,6 @@ def get_user_diaries(sh, username):
         user_diaries = {}
         for row in rows:
             if row['username'] == username:
-                # 같은 날짜가 있으면 덮어쓰기 (마지막 일기 기준)
                 user_diaries[row['date']] = {"emotion": row['emotion'], "text": row['text']}
         return user_diaries
     except: return {}
@@ -142,12 +140,12 @@ def get_spotify_client():
         return spotipy.Spotify(client_credentials_manager=manager, retries=3, backoff_factor=0.3)
     except: return None
 
-# ⭐️ 안전한 음악 추천
+# ⭐️ Spotify 로직 (강력한 안전장치)
 def recommend_music(emotion):
     sp = get_spotify_client()
     if not sp: return [{"error": "Spotify 연결 실패"}]
     
-    # 더 안전한 공식 플레이리스트 ID 사용
+    # 1. 감정별 공식/인기 큐레이션 ID (안정적)
     SAFE_PLAYLISTS = {
         "행복": ["37i9dQZEVXbJxxNsEk86S4", "37i9dQZF1DXcBWIGoYBM5M"], # K-Pop ON!, Today's Top Hits
         "슬픔": ["37i9dQZF1DXa29a0n9wGgC", "37i9dQZF1DX7qK8ma5wgG1"], # K-Pop Ballad, Sad Songs
@@ -159,7 +157,7 @@ def recommend_music(emotion):
     
     try:
         candidates = SAFE_PLAYLISTS.get(emotion, SAFE_PLAYLISTS["중립"])
-        random.shuffle(candidates) # 플레이리스트 순서 섞기
+        random.shuffle(candidates)
         
         valid_tracks = []
         for pid in candidates:
@@ -170,14 +168,28 @@ def recommend_music(emotion):
                     t = it.get('track')
                     if t and t.get('id') and t.get('name'):
                          valid_tracks.append({"id": t['id'], "title": t['name']})
-                if len(valid_tracks) >= 5: break # 충분히 모이면 중단
+                if len(valid_tracks) >= 5: break
             except: continue
+
+        # 2. 만약 1번이 (네트워크 등 이유로) 실패하면, 키워드 검색으로 재시도 (안전장치 2)
+        if not valid_tracks:
+            KR_KEYWORDS = {
+                "행복": ["여행", "행복", "케이팝 최신", "여름 노래"],
+                "슬픔": ["발라드 최신", "이별 노래", "감성 케이팝"],
+                "분노": ["인기 밴드", "팝송", "스트레스", "재즈"],
+                "힘듦": ["위로 노래", "힐링 케이팝", "잔잔한 팝"],
+                "놀람": ["파티 케이팝", "EDM 케이팝", "페스티벌 음악"],
+            }
+            query = random.choice(KR_KEYWORDS.get(emotion, ["케이팝"])) + " year:2010-2025 NOT children"
+            res = sp.search(q=query, type="track", limit=20)
+            items = (res.get("tracks") or {}).get("items") or []
+            for t in items:
+                if t.get('id') and t.get('name'):
+                    valid_tracks.append({"id": t['id'], "title": t['name']})
 
         if not valid_tracks: return [{"error": "추천 곡을 찾지 못했습니다."}]
         
-        # 중복 제거
-        seen = set()
-        unique = []
+        seen = set(); unique = []
         for v in valid_tracks:
              if v['id'] not in seen: unique.append(v); seen.add(v['id'])
              
@@ -191,7 +203,7 @@ def recommend_movies(emotion):
     try:
         r = requests.get(f"{TMDB_BASE_URL}/discover/movie", params={
             "api_key": key, "language": "ko-KR", "sort_by": "popularity.desc", "with_genres": GENRES.get(emotion), "without_genres": "16",
-            "page": random.randint(1, 5), "vote_count.gte": 500, "vote_average.gte": 7.0, "primary_release_date.gte": "2000-01-01"
+            "page": random.randint(1, 5), "vote_count.gte": 1000, "vote_average.gte": 7.5, "primary_release_date.gte": "2000-01-01"
         }, timeout=5)
         r.raise_for_status(); results = r.json().get("results", [])
         if not results: return [{"text": "조건에 맞는 영화가 없습니다.", "poster": None}]
@@ -208,13 +220,14 @@ if "page" not in st.session_state: st.session_state.page = "login"
 def login_page():
     st.title("MOODIARY 💖")
     tab1, tab2 = st.tabs(["🔑 로그인", "📝 회원가입"])
-    sh = init_db() # DB 연결
+    sh = init_db()
+    if sh is None: st.error("데이터베이스 연결 실패. Secrets 설정을 확인하세요."); return
+
     with tab1:
         lid = st.text_input("아이디", key="lid")
         lpw = st.text_input("비밀번호", type="password", key="lpw")
-        if st.button("로그인", use_container_width=True):
+        if st.button("로그인", width='stretch'):
             users = get_all_users(sh)
-            # 비밀번호를 문자열로 변환해서 비교
             if lid in users and str(users[lid]) == str(lpw):
                 st.session_state.logged_in = True
                 st.session_state.username = lid
@@ -224,9 +237,9 @@ def login_page():
     with tab2:
         nid = st.text_input("새 아이디", key="nid")
         npw = st.text_input("새 비밀번호 (4자리)", type="password", key="npw", max_chars=4)
-        if st.button("가입하기", use_container_width=True):
+        if st.button("가입하기", width='stretch'):
             users = get_all_users(sh)
-            if nid in users: st.error("이미 존재하는 아이디입니다.")
+            if nid in users: st.error("이미 있는 아이디입니다.")
             elif len(nid)<1 or len(npw)!=4: st.error("입력을 확인해주세요.")
             else:
                 if add_user(sh, nid, npw): st.success("가입 성공! 로그인해주세요.")
@@ -236,9 +249,9 @@ def dashboard_page():
     st.title(f"{st.session_state.username}님의 감정 달력 📅")
     
     # ⭐️ 감정 색상 범례 (Legend)
-    cols = st.columns(6)
+    legend_cols = st.columns(6)
     for i, (emo, meta) in enumerate(EMOTION_META.items()):
-        cols[i].markdown(f"<span style='color:{meta['color']};'>●</span> {emo}", unsafe_allow_html=True)
+        legend_cols[i].markdown(f"<span style='color:{meta['color']}; font-size: 1.2em;'>●</span> {emo}", unsafe_allow_html=True)
     st.divider()
 
     # 달력 데이터 로드
@@ -248,41 +261,52 @@ def dashboard_page():
     for date_str, data in my_diaries.items():
         emo = data.get("emotion", "중립")
         meta = EMOTION_META.get(emo, EMOTION_META["중립"])
-        events.append({
-            "title": meta["emoji"], 
-            "start": date_str,
-            "display": "background", # ⭐️ 셀 전체 색칠
-            "backgroundColor": meta["color"],
-            "borderColor": meta["color"]
-        })
-        # 이모지를 위에 덧그리기 위한 추가 이벤트
-        events.append({
-            "title": meta["emoji"],
-            "start": date_str,
-            "allDay": True,
-            "backgroundColor": "transparent",
-            "borderColor": "transparent",
-            "textColor": "#000000" # 이모지 잘 보이게 검은색
-        })
+        events.append({"title": meta["emoji"], "start": date_str, "display": "background", "backgroundColor": meta["color"], "borderColor": meta["color"]})
+        events.append({"title": meta["emoji"], "start": date_str, "allDay": True, "backgroundColor": "transparent", "borderColor": "transparent", "textColor": "#000000"})
 
     calendar(events=events, options={"headerToolbar": {"left": "prev,next today", "center": "title", "right": ""}, "initialView": "dayGridMonth"}, 
-             custom_css=".fc-event-title { font-size: 2em !important; text-align: center; } .fc-bg-event { opacity: 0.6; }") # ⭐️ 스타일 개선
-    
+             custom_css=".fc-event-title { font-size: 2em !important; text-align: center; } .fc-bg-event { opacity: 0.6; }")
     st.write("")
-    if st.button("✏️ 오늘 일기 쓰러 가기", type="primary", use_container_width=True):
-        st.session_state.page = "write"
-        st.rerun()
+
+    # ⭐️⭐️⭐️ 신규 기능: 오늘 일기 유무에 따른 버튼 분리 ⭐️⭐️⭐️
+    today_str = datetime.now().strftime("%Y-%m-%d")
+    today_diary_exists = today_str in my_diaries
+
+    if today_diary_exists:
+        st.info(f"오늘({today_str})의 일기({my_diaries[today_str]['emotion']} {EMOTION_META[my_diaries[today_str]['emotion']]['emoji']})가 이미 작성되었습니다.")
+        
+        col1, col2 = st.columns(2)
+        with col1:
+            if st.button("✏️ 오늘 일기 수정/확인하기", width='stretch'):
+                st.session_state.page = "write"
+                st.session_state.diary_input = my_diaries[today_str]['text']
+                st.rerun()
+        with col2:
+            def handle_show_recs():
+                today_emo = my_diaries[today_str]['emotion']
+                st.session_state.final_emotion = today_emo
+                st.session_state.music_recs = recommend_music(today_emo)
+                st.session_state.movie_recs = recommend_movies(today_emo)
+                st.session_state.page = "result"
+            if st.button("🎵🎬 오늘의 추천 바로 보기", type="primary", width='stretch'):
+                handle_show_recs()
+                st.rerun()
+    else:
+        # 오늘 일기가 없을 때
+        if st.button("✏️ 오늘의 일기 쓰러 가기", type="primary", width='stretch'):
+            st.session_state.page = "write"
+            st.session_state.diary_input = "" # ⭐️ 새 일기
+            st.rerun()
 
 def result_page():
-    st.title("오늘의 감정 분석 결과 💌")
-    if st.button("🏠 홈으로 (달력 보기)"):
-        st.session_state.page = "dashboard"
-        st.rerun()
-        
     emo = st.session_state.final_emotion
     meta = EMOTION_META.get(emo, EMOTION_META["중립"])
     st.markdown(f"<h2 style='text-align: center; color: {meta['color']};'>{meta['emoji']} 오늘의 감정: {emo}</h2>", unsafe_allow_html=True)
     st.markdown(f"<h4 style='text-align: center;'>{meta['desc']}</h4>", unsafe_allow_html=True)
+    
+    if st.button("⬅️ 달력으로 돌아가기"):
+        st.session_state.page = "dashboard"
+        st.rerun()
     st.divider()
 
     def refresh_music(): st.session_state.music_recs = recommend_music(emo)
@@ -291,15 +315,14 @@ def result_page():
     c1, c2 = st.columns(2)
     with c1:
         st.markdown("#### 🎵 추천 음악")
-        st.button("🔄 다른 음악", on_click=refresh_music, key="rm_btn", use_container_width=True) # ⭐️ 버튼 항상 표시
+        st.button("🔄 다른 음악", on_click=refresh_music, key="rm_btn", width='stretch')
         for item in st.session_state.music_recs:
             if item.get('id'):
                 components.iframe(f"https://open.spotify.com/embed/track/{item['id']}?utm_source=generator", height=80)
             else: st.error(item.get("error", "로딩 실패"))
-
     with c2:
         st.markdown("#### 🎬 추천 영화")
-        st.button("🔄 다른 영화", on_click=refresh_movies, key="rv_btn", use_container_width=True) # ⭐️ 버튼 항상 표시
+        st.button("🔄 다른 영화", on_click=refresh_movies, key="rv_btn", width='stretch')
         for item in st.session_state.movie_recs:
             if item.get('poster'):
                 ic, tc = st.columns([1, 2])
@@ -313,40 +336,46 @@ def write_page():
         st.session_state.page = "dashboard"
         st.rerun()
 
-    # 모델 로드 (여기서만)
     model, tokenizer, device, postmap = load_kobert_model()
     if not model: st.error("AI 모델 로드 중..."); return
 
-    txt = st.text_area("오늘 하루는 어땠나요?", height=300, key="diary_input")
-    if st.button("🔍 감정 분석하기", type="primary", use_container_width=True):
-        if not txt.strip():
-            st.warning("내용을 입력해주세요.")
-            return
-        with st.spinner("분석 중..."):
+    # ⭐️ 수정 시 기존 일기 불러오기
+    if "diary_input" not in st.session_state: st.session_state.diary_input = ""
+    txt = st.text_area("오늘 하루는 어땠나요?", value=st.session_state.diary_input, height=300, key="diary_editor")
+    
+    if st.button("🔍 감정 분석하고 저장하기", type="primary", width='stretch'):
+        if not txt.strip(): st.warning("내용을 입력해주세요."); return
+        
+        with st.spinner("분석 및 저장 중..."):
             emo, sc = analyze_diary_kobert(txt, model, tokenizer, device, postmap)
             st.session_state.final_emotion = emo
             st.session_state.music_recs = recommend_music(emo)
             st.session_state.movie_recs = recommend_movies(emo)
             
-            # DB 저장
             sh = init_db()
             today = datetime.now().strftime("%Y-%m-%d")
-            add_diary(sh, st.session_state.username, today, emo, txt)
+            add_diary(sh, st.session_state.username, today, emo, txt) # ⭐️ 덮어쓰기 (저장)
             
             st.session_state.page = "result"
             st.rerun()
 
-# 앱 라우터
+# =========================================
+# 🚀 앱 메인 컨트롤러
+# =========================================
+if "logged_in" not in st.session_state: st.session_state.logged_in = False
+if "page" not in st.session_state: st.session_state.page = "login"
+
+# ⭐️ use_container_width 경고 수정
+if st.session_state.logged_in:
+    with st.sidebar:
+        st.write(f"**{st.session_state.username}**님")
+        if st.button("로그아웃", width='stretch'):
+            st.session_state.logged_in = False
+            st.session_state.page = "login"
+            st.rerun()
+
+# 페이지 라우팅
 if not st.session_state.logged_in: login_page()
 elif st.session_state.page == "dashboard": dashboard_page()
 elif st.session_state.page == "write": write_page()
 elif st.session_state.page == "result": result_page()
-
-# 사이드바 로그아웃 (로그인 상태일 때만)
-if st.session_state.logged_in:
-    with st.sidebar:
-        st.write(f"**{st.session_state.username}**님")
-        if st.button("로그아웃"):
-            st.session_state.logged_in = False
-            st.session_state.page = "login"
-            st.rerun()
