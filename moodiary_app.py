@@ -90,7 +90,7 @@ def add_user(sh, username, password):
 def get_user_diaries(sh, username):
     if not sh: return {}
     try:
-        rows = sh.worksheet("diaries").get_all_records()
+        rows = sh.worksksheet("diaries").get_all_records()
         user_diaries = {}
         for row in rows:
             if row['username'] == username:
@@ -274,47 +274,70 @@ def dashboard_page():
     for date_str, data in my_diaries.items():
         emo = data.get("emotion", "중립")
         meta = EMOTION_META.get(emo, EMOTION_META["중립"])
-        # ⭐️⭐️⭐️ [수정됨] 달력 이모티콘은 하나만 표시되도록 수정 ⭐️⭐️⭐️
-        events.append({"title": meta["emoji"], "start": date_str, "allDay": True, "backgroundColor": meta["color"], "borderColor": meta["color"], "textColor": "#000000"})
+        # ⭐️ 하나의 이벤트로 통합 (배경색 + 이모티콘)
+        events.append({
+            "title": meta["emoji"], 
+            "start": date_str, 
+            "allDay": True, 
+            "backgroundColor": meta["color"], 
+            "borderColor": meta["color"], 
+            "textColor": "#000000"
+        })
 
-    # ⭐️⭐️⭐️ [수정됨] 달력 이모티콘 중앙 정렬 및 크기 조절 CSS ⭐️⭐️⭐️
+    # ⭐️⭐️⭐️ [핵심 수정] 달력 CSS 수정 (색깔 부활, 중앙 정렬) ⭐️⭐️⭐️
     calendar(events=events, options={"headerToolbar": {"left": "prev,next today", "center": "title", "right": ""}, "initialView": "dayGridMonth"}, 
              custom_css="""
+             /* 1. 이모티콘 (타이틀) 스타일 */
              .fc-event-title {
-                 font-size: 3em !important; /* 이모티콘 크기 3배 */
-                 text-align: center;
+                 font-size: 3em !important;    /* 이모티콘 크기 */
                  display: flex;
-                 justify-content: center;
-                 align-items: center;
-                 height: 100%; /* 셀 높이 전체를 차지하도록 */
-                 line-height: 1; /* 텍스트 줄 간격 */
+                 justify-content: center; /* 가로 중앙 */
+                 align-items: center;     /* 세로 중앙 */
+                 height: 100%;            /* 부모(이벤트) 높이 100% */
+                 line-height: 1;
              }
+ 
+             /* 2. 이벤트 자체의 스타일 (이모티콘 감싸는 래퍼) */
              .fc-daygrid-event {
-                 padding: 0;
-                 margin: 0;
-                 border: none;
-                 background-color: transparent !important;
+                 padding: 0 !important;
+                 margin: 0 !important;
+                 border: none !important;
                  color: black !important;
+                 /* ⭐️ [수정] 투명 배경색 제거 -> 이제 이벤트에 설정된 배경색이 보입니다 */
+                 
+                 /* ⭐️ [추가] 이벤트가 셀을 꽉 채우도록 높이/너비 100% */
+                 height: 100%;
+                 width: 100%;
              }
+ 
+             /* 3. 날짜 셀 '전체 프레임' 스타일 */
              .fc-daygrid-day-frame {
+                 height: 100%; /* ⭐️ [추가] 셀 높이를 100%로 설정 */
                  display: flex;
                  flex-direction: column;
                  justify-content: center; /* 세로 중앙 정렬 */
                  align-items: center; /* 가로 중앙 정렬 */
+                 position: relative; /* ⭐️ 날짜 숫자 위치 기준 */
              }
+ 
+             /* 4. 날짜 숫자 스타일 (오른쪽 상단 절대 위치) */
              .fc-daygrid-day-number {
-                 position: absolute;
-                 top: 5px;
-                 right: 5px;
-                 font-size: 0.8em; /* 날짜 숫자는 작게 유지 */
-                 color: black;
+                  position: absolute !important; /* ⭐️ 절대 위치로 변경 */
+                  top: 5px;
+                  right: 5px;
+                  font-size: 0.8em;
+                  color: black;
+                  z-index: 2; /* ⭐️ 배경색/이벤트보다 위에 표시 */
              }
+             
+             /* 5. 날짜 셀의 '컨텐츠 영역' 스타일 (날짜 숫자 제외) */
              .fc-daygrid-day-top {
-                flex-grow: 1;
+                flex-grow: 1; /* ⭐️ 날짜 숫자 제외한 나머지 공간 모두 차지 */
                 display: flex;
                 flex-direction: column;
-                justify-content: center;
-                align-items: center;
+                justify-content: center; /* 세로 중앙 */
+                align-items: center;     /* 가로 중앙 */
+                width: 100%; /* ⭐️ 너비 100% */
              }
              """
              )
@@ -368,7 +391,7 @@ def result_page():
         st.button("🔄 다른 음악", on_click=refresh_music, key="rm_btn", width='stretch')
         for item in st.session_state.music_recs:
             if item.get('id'):
-                # ⭐️⭐️⭐️ [수정됨] 스포티파이 iframe 크기 조절 (height, width) ⭐️⭐️⭐️
+                # 스포티파이 iframe 크기 (이전과 동일)
                 components.iframe(f"https://open.spotify.com/embed/track/{item['id']}", height=250, width="100%") 
             else: 
                 st.error(item.get("error", "로딩 실패"))
