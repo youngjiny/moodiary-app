@@ -157,58 +157,66 @@ def get_spotify_client():
     except Exception as e:
         return f"Spotify 로그인 실패: {e}"
 
-# ⭐️ Spotify 로직 (강력한 안전장치)
+# --- 6) ⭐️ Spotify 추천 (플레이리스트 검색 기반 + 404 방어) ---
 def recommend_music(emotion):
     sp = get_spotify_client()
-    if not isinstance(sp, spotipy.Spotify):
-        return [{"error": sp}] # ⭐️ 오류 메시지 반환
-    
-    SAFE_PLAYLISTS = {
-        "행복": ["37i9dQZEVXbJxxNsEk86S4", "37i9dQZF1DXcBWIGoYBM5M"],
-        "슬픔": ["37i9dQZF1DXa29a0n9wGgC", "37i9dQZF1DX7qK8ma5wgG1"],
-        "분노": ["37i9dQZF1DXdfhOsjPtoaS", "37i9dQZF1DWWJOmJ7nRx0C"],
-        "힘듦": ["37i9dQZF1DXdls6m8FLMpo", "37i9dQZF1DWV7EzJMK2FUI"],
-        "놀람": ["37i9dQZEVXbJxxNsEk86S4", "37i9dQZF1DX4dyzvuaRJ0n"],
-        "중립": ["37i9dQZF1DWT9uTRZAYj0c"]
+    if not sp:
+        return ["Spotify 연결 실패 (Secrets 확인 필요)"]
+
+    # ⭐️ 감정별 검색 키워드 (OR 조건 활용)
+    GENRE_MAP = {
+        '행복': ['happy k-pop', 'joyful pop', 'exciting k-pop', 'summer vibe'],
+        '분노': ['angry rock', 'hard rock', 'stress relief', 'powerful k-pop'],
+        '슬픔': ['sad k-pop ballad', 'gloomy pop', 'heartbreak song', 'emotional ost'],
+        '힘듦': ['healing k-pop', 'chill pop', 'comforting song', 'acoustic'],
+        '놀람': ['party music', 'edm k-pop', 'festival vibes', 'upbeat pop']
     }
-    
+
+    keywords = GENRE_MAP.get(emotion, ['k-pop'])
+    query_base = " OR ".join(keywords)
+    # 노키즈존 필터 추가
+    query = f"({query_base}) NOT children NOT nursery"
+
     try:
-        candidates = SAFE_PLAYLISTS.get(emotion, SAFE_PLAYLISTS["중립"])
-        random.shuffle(candidates)
+        # 1️⃣ 플레이리스트 검색 (최대 20개)
+        playlists_resp = sp.search(q=query, type='playlist', limit=20)
+        playlists = playlists_resp.get('playlists', {}).get('items', [])
         
-        valid_tracks = []
-        for pid in candidates:
+        if not playlists:
+            return ["관련 플레이리스트를 찾지 못했습니다."]
+
+        # 2️⃣ 플레이리스트 중 하나 랜덤 선택 & 트랙 가져오기 (최대 3번 재시도)
+        for _ in range(3): # (안정성을 위해 3번 시도)
+            chosen_playlist = random.choice(playlists)
+            if not chosen_playlist or not chosen_playlist.get('id'): continue
+
             try:
-                results = sp.playlist_items(pid, limit=30)
-                items = results.get('items', []) if results else []
-                for it in items:
-                    t = it.get('track')
-                    if t and t.get('id') and t.get('name'):
-                         valid_tracks.append({"id": t['id'], "title": t['name']})
-                if len(valid_tracks) >= 5: break
-            except: continue
+                # 플레이리스트의 트랙 가져오기
+                tracks_resp = sp.playlist_items(chosen_playlist['id'], limit=50)
+                items = tracks_resp.get('items', []) if tracks_resp else []
+                
+                valid_tracks = []
+                for item in items:
+                    track = item.get('track')
+                    # 트랙 유효성 검사 (ID가 있어야 재생 버튼 가능)
+                    if track and track.get('id') and track.get('name'):
+                        valid_tracks.append({
+                            'id': track['id'],
+                            'title': track['name'],
+                            'artist': track['artists'][0]['name'] if track.get('artists') else 'Unknown'
+                        })
+                
+                if valid_tracks:
+                    # 3곡 랜덤 선택 후 반환
+                    return random.sample(valid_tracks, k=min(3, len(valid_tracks)))
+            
+            except Exception:
+                continue # 이 플레이리스트가 에러나면 다음 거 시도
 
-        if not valid_tracks: return [{"error": "추천 곡을 찾지 못했습니다."}]
-        seen = set(); unique = []
-        for v in valid_tracks:
-             if v['id'] not in seen: unique.append(v); seen.add(v['id'])
-        return random.sample(unique, k=min(3, len(unique)))
-    except Exception as e: return [{"error": f"Spotify 오류: {e}"}]
+        return ["추천할 만한 노래를 찾지 못했습니다. (플레이리스트 접근 불가)"]
 
-def recommend_movies(emotion):
-    key = st.secrets.get("tmdb", {}).get("api_key") or st.secrets.get("TMDB_API_KEY") or EMERGENCY_TMDB_KEY
-    if not key: return [{"text": "TMDB 연결 실패", "poster": None}]
-    GENRES = {"행복": "35|10749|10751|27", "분노": "28|12|35|878", "슬픔": "35|10751|14", "힘듦": "35|10751|14", "놀람": "35|10751|14"}
-    try:
-        r = requests.get(f"{TMDB_BASE_URL}/discover/movie", params={
-            "api_key": key, "language": "ko-KR", "sort_by": "popularity.desc", "with_genres": GENRES.get(emotion), "without_genres": "16",
-            "page": random.randint(1, 5), "vote_count.gte": 1000, "vote_average.gte": 7.5, "primary_release_date.gte": "2000-01-01"
-        }, timeout=5)
-        r.raise_for_status(); results = r.json().get("results", [])
-        if not results: return [{"text": "조건에 맞는 영화가 없습니다.", "poster": None}]
-        picks = random.sample(results, min(3, len(results)))
-        return [{"title": m.get("title"), "year": (m.get("release_date") or "")[:4], "rating": m.get("vote_average", 0.0), "overview": m.get("overview", ""), "poster": f"https://image.tmdb.org/t/p/w500{m['poster_path']}" if m.get("poster_path") else None} for m in picks]
-    except Exception as e: return [{"text": f"TMDb 오류: {e}", "poster": None}]
+    except Exception as e:
+        return [f"Spotify 검색 오류: {e}"]
 
 # =========================================
 # 🖥️ 5) 화면 구성
@@ -372,3 +380,4 @@ if not st.session_state.logged_in: login_page()
 elif st.session_state.page == "dashboard": dashboard_page()
 elif st.session_state.page == "write": write_page()
 elif st.session_state.page == "result": result_page()
+
