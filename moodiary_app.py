@@ -8,7 +8,7 @@ import time
 import streamlit.components.v1 as components
 import json
 import os
-from datetime import datetime, timezone, timedelta # ⭐️ [수정] timezone, timedelta 추가
+from datetime import datetime, timezone, timedelta # KST
 from streamlit_calendar import calendar
 import gspread
 from google.oauth2.service_account import Credentials
@@ -32,17 +32,17 @@ GSHEET_DB_NAME = "moodiary_db"
 # 비상용 TMDB 키
 EMERGENCY_TMDB_KEY = "8587d6734fd278ecc05dcbe710c29f9c"
 
-# ⭐️ [수정] 감정별 테마 (색상 변경: 분노, 중립)
+# 감정별 테마 (색상 변경: 분노, 중립)
 EMOTION_META = {
     "행복": {"color": "#FFD700", "emoji": "😆", "desc": "최고의 하루!"},       # 노랑
     "슬픔": {"color": "#1E90FF", "emoji": "😭", "desc": "토닥토닥, 힘내요."},     # 파랑
-    "분노": {"color": "#FF0000", "emoji": "🤬", "desc": "워워, 진정해요."},       # ⭐️ 빨강
+    "분노": {"color": "#FF0000", "emoji": "🤬", "desc": "워워, 진정해요."},       # 빨강
     "힘듦": {"color": "#808080", "emoji": "🤯", "desc": "휴식이 필요해."},     # 회색
     "놀람": {"color": "#8A2BE2", "emoji": "😱", "desc": "깜짝 놀랐군요!"},     # 보라
-    "중립": {"color": "#363636", "emoji": "😐", "desc": "평온한 하루."}        # ⭐️ 어두운 회색 (검정)
+    "중립": {"color": "#363636", "emoji": "😐", "desc": "평온한 하루."}        # 어두운 회색 (검정)
 }
 
-# ⭐️ [추가] 대한민국 표준시(KST) 정의 (UTC+9)
+# 대한민국 표준시(KST) 정의 (UTC+9)
 KST = timezone(timedelta(hours=9))
 
 st.set_page_config(layout="wide", page_title="MOODIARY")
@@ -270,19 +270,30 @@ def dashboard_page():
     sh = init_db()
     my_diaries = get_user_diaries(sh, st.session_state.username)
     events = []
+    
+    # ⭐️⭐️⭐️ [핵심 수정] 이벤트를 '배경색'과 '이모티콘'으로 분리 ⭐️⭐️⭐️
     for date_str, data in my_diaries.items():
         emo = data.get("emotion", "중립")
         meta = EMOTION_META.get(emo, EMOTION_META["중립"])
+        
+        # 1. 배경색 이벤트 (칸 전체 채우기 용)
+        events.append({
+            "start": date_str, 
+            "display": "background", 
+            "backgroundColor": meta["color"]
+        })
+        
+        # 2. 이모티콘 이벤트 (배경색 없음)
         events.append({
             "title": meta["emoji"], 
             "start": date_str, 
-            "allDay": True, 
-            "backgroundColor": meta["color"], 
-            "borderColor": meta["color"], 
+            "allDay": True,
+            "backgroundColor": "transparent", # 이벤트 자체의 배경은 투명
+            "borderColor": "transparent",     # 이벤트 자체의 테두리도 투명
             "textColor": "#000000"
         })
 
-    # ⭐️ [수정] 달력 CSS (이모티콘 위로 10px 이동)
+    # ⭐️⭐️⭐️ [핵심 수정] 달력 CSS (이모티콘 위로 + 배경색 100%) ⭐️⭐️⭐️
     calendar(events=events, options={"headerToolbar": {"left": "prev,next today", "center": "title", "right": ""}, "initialView": "dayGridMonth"}, 
              custom_css="""
              /* 1. 이모티콘 (타이틀) 스타일 */
@@ -293,20 +304,21 @@ def dashboard_page():
                  align-items: center;
                  height: 100%;
                  line-height: 1;
-                 transform: translateY(-10px); /* ⭐️ [수정] 10px 위로 이동 */
+                 /* ⭐️ [수정] 20px 위로 이동 */
+                 transform: translateY(-20px); 
              }
  
-             /* 2. 이벤트 자체의 스타일 (이모티콘 감싸는 래퍼) */
+             /* 2. 이모티콘 '이벤트' 스타일 (투명) */
              .fc-daygrid-event {
                  padding: 0 !important;
                  margin: 0 !important;
                  border: none !important;
                  color: black !important;
-                 height: 100%;
-                 width: 100%;
+                 /* ⭐️ 이모티콘 이벤트 자체의 배경은 무조건 투명 */
+                 background-color: transparent !important; 
              }
  
-             /* 3. 날짜 셀 '전체 프레임' 스타일 */
+             /* 3. 날짜 셀 '전체 프레임' 스타일 (중앙 정렬 기준) */
              .fc-daygrid-day-frame {
                  height: 100%;
                  display: flex;
@@ -316,7 +328,7 @@ def dashboard_page():
                  position: relative;
              }
  
-             /* 4. 날짜 숫자 스타일 (오른쪽 상단 절대 위치) */
+             /* 4. 날짜 숫자 스타일 (오른쪽 상단) */
              .fc-daygrid-day-number {
                   position: absolute !important;
                   top: 5px;
@@ -326,20 +338,25 @@ def dashboard_page():
                   z-index: 2;
              }
              
-             /* 5. 날짜 셀의 '컨텐츠 영역' 스타일 (날짜 숫자 제외) */
+             /* 5. 날짜 셀 '컨텐츠 영역' 스타일 (이모티콘 배치 영역) */
              .fc-daygrid-day-top {
                 flex-grow: 1;
                 display: flex;
                 flex-direction: column;
-                justify-content: center;
+                justify-content: center; /* 이모티콘을 세로 중앙에 배치 */
                 align-items: center;
                 width: 100%;
+             }
+             
+             /* 6. ⭐️ [추가] 배경 이벤트의 투명도를 100%로 설정 */
+             .fc-bg-event {
+                 opacity: 1.0 !important;
              }
              """
              )
     st.write("")
 
-    # ⭐️ [수정] 오늘 날짜를 KST 기준으로 가져옴
+    # 오늘 날짜를 KST 기준으로 가져옴
     today_str = datetime.now(KST).strftime("%Y-%m-%d")
     today_diary_exists = today_str in my_diaries
 
@@ -423,7 +440,7 @@ def write_page():
             st.session_state.movie_recs = recommend_movies(emo)
             
             sh = init_db()
-            # ⭐️ [수정] 오늘 날짜를 KST 기준으로 가져옴
+            # 오늘 날짜를 KST 기준으로 가져옴
             today = datetime.now(KST).strftime("%Y-%m-%d")
             add_diary(sh, st.session_state.username, today, emo, txt)
             
