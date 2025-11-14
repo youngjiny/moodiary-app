@@ -333,7 +333,6 @@ def dashboard_page():
                  )
         st.write("")
 
-    # ⭐️⭐️⭐️ [핵심 수정] '이달의 통계' 탭: st.vega_lite_chart로 변경 ⭐️⭐️⭐️
     with tab2:
         today = datetime.now(KST)
         st.subheader(f"{today.month}월의 감정 통계")
@@ -357,40 +356,36 @@ def dashboard_page():
         domain = list(EMOTION_META.keys())
         range_ = [meta['color'] for meta in EMOTION_META.values()] # 옅은 rgba 색상
 
-        # 4. ⭐️ [수정] st.vega_lite_chart로 차트 생성 (모든 문제 해결)
+        # 4. st.vega_lite_chart로 차트 생성
         st.vega_lite_chart(chart_data, {
             "title": f"{today.month}월의 감정 분포",
-            "width": "container", # 컨테이너 너비에 맞춤
+            "width": "container",
             "mark": {
                 "type": "bar", 
                 "cornerRadius": 5, 
-                "opacity": 1.0 # ⭐️ 색상 자체가 옅으므로 1.0 (불투명)
+                "opacity": 1.0 
             },
             "encoding": {
-                # ⭐️ X축: 글자 수평 정렬 (눕지 않게)
                 "x": {
                     "field": "emotion", 
-                    "type": "nominal", # 범주형
+                    "type": "nominal",
                     "sort": domain, 
                     "title": "감정",
-                    "axis": {"labelAngle": 0} 
+                    "axis": {"labelAngle": 0} # 글자 가로 정렬
                 },
-                # ⭐️ Y축: 0부터 시작 (음수 방지)
                 "y": {
                     "field": "count", 
-                    "type": "quantitative", # 수량형
+                    "type": "quantitative",
                     "title": "횟수",
-                    "scale": {"zero": True},
+                    "scale": {"zero": True}, # 0부터 시작
                     "axis": {"format": "d", "tickMinStep": 1}
                 },
-                # ⭐️ 색상: 옅은 색상 매핑 + 범례(rgba 문자열) 숨기기
                 "color": {
                     "field": "emotion",
                     "type": "nominal",
                     "scale": {"domain": domain, "range": range_},
-                    "legend": None 
+                    "legend": None # 'rgba(...)' 범례 숨기기
                 },
-                # 툴팁
                 "tooltip": [
                     {"field": "emotion", "title": "감정"},
                     {"field": "count", "title": "횟수"}
@@ -463,7 +458,8 @@ def result_page():
             if item.get('poster'):
                 ic, tc = st.columns([1, 2])
                 ic.image(item['poster'], use_container_width=True)
-                tc.markdown(f"**{item['title']} ({item['year']})**\n⭐ {item['rating']:.1f}\n\n*{item.get('overview','')[:100]}...*")
+                # ⭐️⭐️⭐️ [핵심 수정] 줄거리 100자 제한 해제 ⭐️⭐️⭐️
+                tc.markdown(f"**{item['title']} ({item['year']})**\n⭐ {item['rating']:.1f}\n\n*{item.get('overview','')}*")
             else: st.error(item.get("text", "로딩 실패"))
 
 def write_page():
