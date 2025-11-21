@@ -21,11 +21,10 @@ except ImportError:
     SPOTIPY_AVAILABLE = False
 
 # --- 2) 기본 설정 ---
-EMOTION_MODEL_ID = "JUDONGHYEOK/6-emotion-bert-korean-v2"  # 6감정 모델
+EMOTION_MODEL_ID = "JUDONGHYEOK/6-emotion-bert-korean-v2"
 TMDB_BASE_URL = "https://api.themoviedb.org/3"
 EMERGENCY_TMDB_KEY = "8587d6734fd278ecc05dcbe710c29f9c"
 
-# 감정별 메타 정보
 EMOTION_META = {
     "기쁨": {"color": "rgba(255, 215, 0, 0.4)", "emoji": "😆", "desc": "기분 좋은 하루네요!"},
     "분노": {"color": "rgba(255, 69, 0, 0.4)", "emoji": "😡", "desc": "많이 답답했겠어요."},
@@ -35,23 +34,17 @@ EMOTION_META = {
     "중립": {"color": "rgba(54, 54, 54, 0.2)", "emoji": "😐", "desc": "차분한 하루였어요."},
 }
 
-# 대한민국 표준시(KST)
 KST = timezone(timedelta(hours=9))
 
 st.set_page_config(layout="wide", page_title="MOODIARY", page_icon="💖")
 
-# ⭐️⭐️⭐️ [디자인] 커스텀 CSS ⭐️⭐️⭐️
+# ⭐️ 커스텀 CSS (행복 카드 등 디자인)
 def apply_custom_css():
     st.markdown("""
         <style>
         @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;700&display=swap');
-        
-        html, body, [class*="css"] {
-            font-family: 'Noto Sans KR', sans-serif;
-        }
-        .stApp {
-            background: linear-gradient(to bottom right, #FDFBF7, #E6E9F0);
-        }
+        html, body, [class*="css"] { font-family: 'Noto Sans KR', sans-serif; }
+        .stApp { background: linear-gradient(to bottom right, #FDFBF7, #E6E9F0); }
         .block-container {
             background-color: rgba(255, 255, 255, 0.95);
             padding: 3rem !important;
@@ -62,63 +55,40 @@ def apply_custom_css():
         }
         /* 버튼 스타일 */
         .stButton > button {
-            border-radius: 12px;
-            border: none;
-            background-color: #6C5CE7;
-            color: white;
-            font-weight: 700;
-            transition: all 0.3s ease;
+            border-radius: 12px; border: none; background-color: #6C5CE7;
+            color: white; font-weight: 700; transition: all 0.3s ease;
         }
         .stButton > button:hover {
-            background-color: #5b4bc4;
-            transform: translateY(-2px);
-            color: white;
+            background-color: #5b4bc4; transform: translateY(-2px); color: white;
         }
-        /* 행복 카드 스타일 */
+        /* 행복 저장소 카드 스타일 */
         .happy-card {
-            background-color: #FFF9C4; /* 연한 노랑 */
-            padding: 20px;
-            border-radius: 15px;
-            margin-bottom: 15px;
-            box-shadow: 0 2px 5px rgba(0,0,0,0.05);
+            background-color: #FFF9C4; padding: 20px; border-radius: 15px;
+            margin-bottom: 15px; box-shadow: 0 2px 5px rgba(0,0,0,0.05);
             border-left: 5px solid #FFD700;
         }
+        .happy-date { font-size: 0.9em; color: #666; margin-bottom: 5px; }
+        .happy-text { font-size: 1.1em; color: #333; }
         </style>
     """, unsafe_allow_html=True)
 
 # =========================================
-# 🗂 3) SQLite 데이터베이스
+# 🗂 DB & 🧠 AI & 🎧 추천 로직 (기존 동일)
 # =========================================
 @st.cache_resource
 def get_db():
     conn = sqlite3.connect("moodiary.db", check_same_thread=False)
     cur = conn.cursor()
-    cur.execute("""
-        CREATE TABLE IF NOT EXISTS users (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            username TEXT UNIQUE,
-            password TEXT
-        )
-    """)
-    cur.execute("""
-        CREATE TABLE IF NOT EXISTS diaries (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            username TEXT,
-            date TEXT,
-            emotion TEXT,
-            text TEXT
-        )
-    """)
+    cur.execute("CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY AUTOINCREMENT, username TEXT UNIQUE, password TEXT)")
+    cur.execute("CREATE TABLE IF NOT EXISTS diaries (id INTEGER PRIMARY KEY AUTOINCREMENT, username TEXT, date TEXT, emotion TEXT, text TEXT)")
     conn.commit()
     return conn
-
 conn = get_db()
 
 def get_all_users():
     cur = conn.cursor()
     cur.execute("SELECT username, password FROM users")
-    rows = cur.fetchall()
-    return {u: p for (u, p) in rows}
+    return {u: p for (u, p) in cur.fetchall()}
 
 def add_user(username, password):
     try:
@@ -126,31 +96,23 @@ def add_user(username, password):
         cur.execute("INSERT INTO users (username, password) VALUES (?, ?)", (username, password))
         conn.commit()
         return True
-    except sqlite3.IntegrityError:
-        return False
+    except sqlite3.IntegrityError: return False
 
 def get_user_diaries(username):
     cur = conn.cursor()
     cur.execute("SELECT date, emotion, text FROM diaries WHERE username = ?", (username,))
-    rows = cur.fetchall()
     out = {}
-    for d, e, t in rows:
-        out[d] = {"emotion": e, "text": t}
+    for d, e, t in cur.fetchall(): out[d] = {"emotion": e, "text": t}
     return out
 
 def add_diary(username, date, emotion, text):
     cur = conn.cursor()
     cur.execute("SELECT id FROM diaries WHERE username = ? AND date = ?", (username, date))
     row = cur.fetchone()
-    if row:
-        cur.execute("UPDATE diaries SET emotion = ?, text = ? WHERE id = ?", (emotion, text, row[0]))
-    else:
-        cur.execute("INSERT INTO diaries (username, date, emotion, text) VALUES (?, ?, ?, ?)", (username, date, emotion, text))
+    if row: cur.execute("UPDATE diaries SET emotion = ?, text = ? WHERE id = ?", (emotion, text, row[0]))
+    else: cur.execute("INSERT INTO diaries (username, date, emotion, text) VALUES (?, ?, ?, ?)", (username, date, emotion, text))
     conn.commit()
 
-# =========================================
-# 🧠 4) AI 감정 분석
-# =========================================
 @st.cache_resource
 def load_emotion_model():
     try:
@@ -158,18 +120,11 @@ def load_emotion_model():
         model = AutoModelForSequenceClassification.from_pretrained(EMOTION_MODEL_ID)
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         model.to(device)
-        
-        # 모델 라벨 매핑
         cfg_id2label = getattr(model.config, "id2label", None)
-        if isinstance(cfg_id2label, dict) and cfg_id2label:
-            id2label = {int(k): v for k, v in cfg_id2label.items()}
-        else:
-            id2label = {0: "기쁨", 1: "분노", 2: "불안", 3: "슬픔", 4: "중립", 5: "힘듦"}
-            
+        if isinstance(cfg_id2label, dict) and cfg_id2label: id2label = {int(k): v for k, v in cfg_id2label.items()}
+        else: id2label = {0: "기쁨", 1: "분노", 2: "불안", 3: "슬픔", 4: "중립", 5: "힘듦"}
         return model, tokenizer, device, id2label
-    except Exception as e:
-        st.error(f"AI 모델 로드 실패: {e}")
-        return None, None, None, None
+    except Exception as e: return None, None, None, None
 
 def analyze_diary(text, model, tokenizer, device, id2label):
     if not text or model is None: return None, 0.0
@@ -181,9 +136,6 @@ def analyze_diary(text, model, tokenizer, device, id2label):
     score = float(probs[pred_id].cpu().item())
     return id2label.get(pred_id, "중립"), score
 
-# =========================================
-# 🎧 5) 음악/영화 추천
-# =========================================
 @st.cache_resource
 def get_spotify_client():
     if not SPOTIPY_AVAILABLE: return "라이브러리 없음"
@@ -198,22 +150,16 @@ def get_spotify_client():
 def recommend_music(emotion):
     sp = get_spotify_client()
     if not isinstance(sp, spotipy.Spotify): return [{"error": sp}]
-    
     SEARCH_KEYWORDS = {
-        "기쁨": ["신나는 K-Pop", "Upbeat", "Happy Hits"],
-        "슬픔": ["Ballad", "Sad Songs", "새벽 감성"],
-        "분노": ["Rock", "Hip Hop", "Workout"],
-        "불안": ["Lofi", "Piano", "Calm"],
-        "힘듦": ["Healing", "Acoustic", "Comfort"],
-        "중립": ["Chill", "K-Pop", "Daily"]
+        "기쁨": ["신나는 K-Pop", "Upbeat", "Happy Hits"], "슬픔": ["Ballad", "Sad Songs", "새벽 감성"],
+        "분노": ["Rock", "Hip Hop", "Workout"], "불안": ["Lofi", "Piano", "Calm"],
+        "힘듦": ["Healing", "Acoustic", "Comfort"], "중립": ["Chill", "K-Pop", "Daily"]
     }
     query = random.choice(SEARCH_KEYWORDS.get(emotion, SEARCH_KEYWORDS["중립"]))
-    
     try:
         results = sp.search(q=query, type="playlist", limit=10, market="KR")
         playlists = results.get("playlists", {}).get("items", [])
         if not playlists: return [{"error": "검색 실패"}]
-        
         valid_tracks = []
         random.shuffle(playlists)
         for pl in playlists:
@@ -225,7 +171,6 @@ def recommend_music(emotion):
                     if t and t.get("id"): valid_tracks.append({"id": t["id"], "title": t["name"]})
                 if len(valid_tracks) >= 10: break
             except: continue
-            
         if not valid_tracks: return [{"error": "곡 없음"}]
         seen = set(); unique = []
         for v in valid_tracks:
@@ -236,7 +181,6 @@ def recommend_music(emotion):
 def recommend_movies(emotion):
     key = st.secrets.get("tmdb", {}).get("api_key") or st.secrets.get("TMDB_API_KEY") or EMERGENCY_TMDB_KEY
     if not key: return [{"text": "API 키 없음", "poster": None}]
-    
     GENRES = {"기쁨": "35|10749", "분노": "28|12", "불안": "16|10751", "슬픔": "18", "힘듦": "18|10402", "중립": "35|18"}
     try:
         r = requests.get(f"{TMDB_BASE_URL}/discover/movie", params={
@@ -251,14 +195,15 @@ def recommend_movies(emotion):
     except Exception as e: return [{"text": f"오류: {e}", "poster": None}]
 
 # =========================================
-# 🖥️ 6) 화면 구성
+# 🖥️ 화면 및 네비게이션 로직
 # =========================================
 apply_custom_css()
 
+# 세션 상태 초기화
 if "logged_in" not in st.session_state: st.session_state.logged_in = False
-# 메뉴 기본값
 if "menu" not in st.session_state: st.session_state.menu = "일기 작성"
 
+# 1. 로그인 페이지
 def login_page():
     st.markdown("<h1 style='text-align: center;'>MOODIARY 💖</h1>", unsafe_allow_html=True)
     tab1, tab2 = st.tabs(["🔑 로그인", "📝 회원가입"])
@@ -271,7 +216,7 @@ def login_page():
             if lid in users and str(users[lid]) == str(lpw):
                 st.session_state.logged_in = True
                 st.session_state.username = lid
-                st.session_state.menu = "일기 작성" # 로그인 직후 이동할 페이지
+                st.session_state.menu = "일기 작성" # 로그인 시 첫 화면
                 st.rerun()
             else: st.error("정보 불일치")
             
@@ -286,31 +231,27 @@ def login_page():
                 if add_user(nid, npw): st.success("성공! 로그인하세요")
                 else: st.error("실패")
 
-# ⭐️ 메뉴에 따라 페이지 보여주기
+# 2. 메인 앱 (네비게이션 컨트롤러)
 def main_app():
-    # --- 사이드바 메뉴 (요청하신 목록 형태) ---
+    # --- 사이드바 메뉴 ---
     with st.sidebar:
         st.markdown(f"### 👋 **{st.session_state.username}**님")
         st.write("")
         
-        # 목록 메뉴 (라디오 버튼으로 구현하여 목록처럼 보이게 함)
-        menu = st.radio(
+        # ⭐️ 목록 (라디오 버튼) - key='menu'로 세션 상태와 자동 동기화
+        st.radio(
             "목록",
-            ["일기 작성", "달력 보기", "음악/영화 추천", "통계 보기"],
-            index=["일기 작성", "달력 보기", "음악/영화 추천", "통계 보기"].index(st.session_state.menu)
+            ["일기 작성", "달력 보기", "음악/영화 추천", "통계 보기", "행복 저장소"],
+            key="menu" 
         )
         
-        # 메뉴 선택 시 상태 업데이트
-        if menu != st.session_state.menu:
-            st.session_state.menu = menu
-            st.rerun()
-            
         st.divider()
+        # ⭐️ 로그아웃 버튼
         if st.button("로그아웃", use_container_width=True):
             st.session_state.logged_in = False
             st.rerun()
 
-    # --- 메인 화면 라우팅 ---
+    # --- 메뉴에 따른 페이지 라우팅 ---
     if st.session_state.menu == "일기 작성":
         page_write()
     elif st.session_state.menu == "달력 보기":
@@ -319,16 +260,16 @@ def main_app():
         page_recommend()
     elif st.session_state.menu == "통계 보기":
         page_stats()
+    elif st.session_state.menu == "행복 저장소":
+        page_happy_storage()
 
-# --- 페이지 1: 일기 작성 ---
+# --- 페이지: 일기 작성 ---
 def page_write():
     st.title("오늘의 이야기 📝")
-    
     model, tokenizer, device, id2label = load_emotion_model()
     if not model: st.error("AI 로드 실패"); return
 
     if "diary_input" not in st.session_state: st.session_state.diary_input = ""
-    
     txt = st.text_area("오늘 하루는 어땠나요?", value=st.session_state.diary_input, height=300)
     
     if st.button("🔍 감정 분석하고 저장하기", type="primary", use_container_width=True):
@@ -337,24 +278,20 @@ def page_write():
         with st.spinner("분석 중..."):
             emo, sc = analyze_diary(txt, model, tokenizer, device, id2label)
             st.session_state.final_emotion = emo
-            
-            # 추천 데이터 미리 로드
+            # 추천 데이터 로드
             st.session_state.music_recs = recommend_music(emo)
             st.session_state.movie_recs = recommend_movies(emo)
-            
             # DB 저장
             today = datetime.now(KST).strftime("%Y-%m-%d")
             add_diary(st.session_state.username, today, emo, txt)
             
-            # 결과 페이지로 자동 이동
+            # ⭐️ 자연스러운 흐름: 저장 후 추천 페이지로 자동 이동
             st.session_state.menu = "음악/영화 추천"
             st.rerun()
 
-# --- 페이지 2: 달력 보기 ---
+# --- 페이지: 달력 보기 ---
 def page_calendar():
     st.title("감정 달력 📅")
-    
-    # 범례
     cols = st.columns(6)
     for i, (k, v) in enumerate(EMOTION_META.items()):
         cols[i].markdown(f"<span style='color:{v['color']};'>●</span> {k}", unsafe_allow_html=True)
@@ -364,9 +301,7 @@ def page_calendar():
     for date_str, data in my_diaries.items():
         emo = data.get("emotion", "중립")
         meta = EMOTION_META.get(emo, EMOTION_META["중립"])
-        # 배경색
         events.append({"start": date_str, "display": "background", "backgroundColor": meta["color"]})
-        # 이모티콘
         events.append({"title": meta["emoji"], "start": date_str, "allDay": True, "backgroundColor": "transparent", "borderColor": "transparent", "textColor": "#000000"})
     
     calendar(events=events, options={"headerToolbar": {"left": "prev,next today", "center": "title", "right": ""}, "initialView": "dayGridMonth"},
@@ -376,10 +311,23 @@ def page_calendar():
              .fc-daygrid-day-number { z-index: 10 !important; color: black; }
              .fc-bg-event { opacity: 1.0 !important; }
              """)
+    
+    st.write("")
+    today_str = datetime.now(KST).strftime("%Y-%m-%d")
+    if today_str in my_diaries:
+        if st.button("오늘 일기 확인하러 가기", use_container_width=True):
+            # ⭐️ 자연스러운 흐름: 일기 확인 -> 작성 페이지로 이동 (내용 수정 가능)
+            st.session_state.diary_input = my_diaries[today_str]["text"]
+            st.session_state.menu = "일기 작성"
+            st.rerun()
+    else:
+        if st.button("오늘 일기 쓰러 가기", type="primary", use_container_width=True):
+            st.session_state.menu = "일기 작성"
+            st.rerun()
 
-# --- 페이지 3: 추천 결과 ---
+# --- 페이지: 추천 결과 ---
 def page_recommend():
-    # 분석된 결과가 없으면 최근 일기 기반으로 로드 시도
+    # 분석된 결과가 없으면 최근 일기 기반 로드
     if "final_emotion" not in st.session_state:
         today = datetime.now(KST).strftime("%Y-%m-%d")
         diaries = get_user_diaries(st.session_state.username)
@@ -388,8 +336,8 @@ def page_recommend():
             st.session_state.music_recs = recommend_music(st.session_state.final_emotion)
             st.session_state.movie_recs = recommend_movies(st.session_state.final_emotion)
         else:
-            st.info("아직 작성된 일기가 없습니다. 일기를 먼저 작성해주세요!")
-            if st.button("일기 쓰러 가기"):
+            st.info("오늘의 감정 기록이 없어요. 일기를 먼저 작성해주세요!")
+            if st.button("일기 쓰러 가기", type="primary"):
                 st.session_state.menu = "일기 작성"
                 st.rerun()
             return
@@ -420,15 +368,13 @@ def page_recommend():
                 ic.image(item['poster'], use_container_width=True)
                 tc.markdown(f"**{item['title']} ({item['year']})**\n⭐ {item['rating']}\n\n*{item.get('overview','')}*")
 
-# --- 페이지 4: 통계 및 행복 저장소 ---
+# --- 페이지: 통계 보기 ---
 def page_stats():
     st.title("나의 감정 통계 📊")
-    
     my_diaries = get_user_diaries(st.session_state.username)
     today = datetime.now(KST)
     cur_month = today.strftime("%Y-%m")
     
-    # 1. 이달의 통계 차트
     st.subheader(f"{today.month}월의 감정 분포")
     month_data = [d['emotion'] for date, d in my_diaries.items() if date.startswith(cur_month)]
     
@@ -437,37 +383,55 @@ def page_stats():
     
     chart_data = counts.reset_index()
     chart_data.columns = ['emotion', 'count']
+    domain = list(EMOTION_META.keys())
+    range_ = [m['color'] for m in EMOTION_META.values()]
     
-    # Vega-Lite 차트
+    # ⭐️⭐️⭐️ [수정완료] 차트 개선: 정수 단위, 가로 라벨, 음수 제거 ⭐️⭐️⭐️
     st.vega_lite_chart(chart_data, {
         "mark": {"type": "bar", "cornerRadius": 5},
         "encoding": {
-            "x": {"field": "emotion", "type": "nominal", "sort": list(EMOTION_META.keys()), "axis": {"labelAngle": 0}, "title": "감정"},
-            "y": {"field": "count", "type": "quantitative", "axis": {"tickMinStep": 1}, "title": "횟수"},
-            "color": {"field": "emotion", "scale": {"domain": list(EMOTION_META.keys()), "range": [m['color'] for m in EMOTION_META.values()]}, "legend": None},
+            "x": {
+                "field": "emotion", 
+                "type": "nominal", 
+                "sort": domain, 
+                "axis": {"labelAngle": 0}, # ⭐️ 글자 가로 정렬
+                "title": "감정"
+            },
+            "y": {
+                "field": "count", 
+                "type": "quantitative", 
+                "axis": {
+                    "tickMinStep": 1, # ⭐️ 1단위 (0.5 제거)
+                    "format": "d",    # 정수 포맷
+                    "titleAngle": 0,  # ⭐️ '횟수' 글자 가로로
+                    "titleAlign": "right",
+                    "titleY": -10
+                }, 
+                "scale": {"domainMin": 0}, # ⭐️ 0부터 시작 (음수 방지)
+                "title": "횟수"
+            },
+            "color": {"field": "emotion", "scale": {"domain": domain, "range": range_}, "legend": None},
             "tooltip": [{"field": "emotion"}, {"field": "count"}]
         }
     }, use_container_width=True)
-    
-    st.divider()
-    
-    # ⭐️⭐️⭐️ [신규 기능] 행복 저장소 ⭐️⭐️⭐️
-    st.subheader("📂 행복 저장소")
+
+# --- 페이지: 행복 저장소 ---
+def page_happy_storage():
+    st.title("행복 저장소 📂")
     st.markdown("내가 **'기쁨'**을 느꼈던 순간들을 모아보세요.")
     
+    my_diaries = get_user_diaries(st.session_state.username)
     happy_moments = {date: data for date, data in my_diaries.items() if data['emotion'] == '기쁨'}
     
     if not happy_moments:
         st.info("아직 기록된 기쁨의 순간이 없어요. 소소한 행복을 기록해보세요!")
     else:
-        # 최신순 정렬
         for date in sorted(happy_moments.keys(), reverse=True):
             data = happy_moments[date]
-            # 카드 형태로 표시 (CSS 클래스 happy-card 사용)
             st.markdown(f"""
             <div class="happy-card">
-                <h4>{date} {EMOTION_META['기쁨']['emoji']}</h4>
-                <p>{data['text']}</p>
+                <div class="happy-date">{date} {EMOTION_META['기쁨']['emoji']}</div>
+                <div class="happy-text">{data['text']}</div>
             </div>
             """, unsafe_allow_html=True)
 
