@@ -26,10 +26,11 @@ TMDB_BASE_URL = "https://api.themoviedb.org/3"
 EMERGENCY_TMDB_KEY = "8587d6734fd278ecc05dcbe710c29f9c"
 
 # 감정별 메타 정보 (모델 라벨 그대로: 기쁨, 분노, 불안, 슬픔, 중립, 힘듦)
+# ⭐️ 디자인을 위해 색상을 rgba로 설정
 EMOTION_META = {
     "기쁨": {"color": "rgba(255, 215, 0, 0.4)", "emoji": "😆", "desc": "기분 좋은 하루네요!"},
     "분노": {"color": "rgba(255, 69, 0, 0.4)", "emoji": "😡", "desc": "많이 답답했겠어요."},
-    "불안": {"color": "rgba(30, 144, 255, 0.4)", "emoji": "😰", "desc": "불안한 마음이 느껴져요."},
+    "불안": {"color": "rgba(138, 43, 226, 0.4)", "emoji": "😰", "desc": "불안한 마음이 느껴져요."}, # 보라색 계열
     "슬픔": {"color": "rgba(65, 105, 225, 0.4)", "emoji": "😭", "desc": "토닥토닥, 수고 많았어요."},
     "힘듦": {"color": "rgba(128, 128, 128, 0.4)", "emoji": "🥺", "desc": "많이 지친 하루였겠네요."},
     "중립": {"color": "rgba(54, 54, 54, 0.2)", "emoji": "😐", "desc": "차분한 하루였어요."},
@@ -38,7 +39,75 @@ EMOTION_META = {
 # 대한민국 표준시(KST)
 KST = timezone(timedelta(hours=9))
 
-st.set_page_config(layout="wide", page_title="MOODIARY")
+st.set_page_config(layout="wide", page_title="MOODIARY", page_icon="💖")
+
+# ⭐️⭐️⭐️ [디자인] 예쁜 UI를 위한 커스텀 CSS 적용 ⭐️⭐️⭐️
+def apply_custom_css():
+    st.markdown("""
+        <style>
+        /* 1. 폰트 설정 (Noto Sans KR) */
+        @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;700&display=swap');
+        
+        html, body, [class*="css"] {
+            font-family: 'Noto Sans KR', sans-serif;
+        }
+
+        /* 2. 전체 배경 (은은한 그라데이션) */
+        .stApp {
+            background: linear-gradient(to bottom right, #FDFBF7, #E6E9F0);
+        }
+
+        /* 3. 메인 컨텐츠 카드 UI (흰색 박스 + 그림자) */
+        .block-container {
+            background-color: rgba(255, 255, 255, 0.95);
+            padding: 3rem !important;
+            border-radius: 20px;
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.05);
+            margin-top: 2rem;
+            max-width: 1000px;
+        }
+
+        /* 4. 버튼 스타일링 (둥글고 부드러운 색상) */
+        .stButton > button {
+            width: 100%;
+            border-radius: 15px;
+            border: none;
+            background-color: #6C5CE7; /* 시그니처 퍼플 */
+            color: white;
+            font-weight: 700;
+            padding: 0.6rem 1rem;
+            transition: all 0.3s ease;
+        }
+        .stButton > button:hover {
+            background-color: #5b4bc4;
+            transform: translateY(-2px);
+            box-shadow: 0 5px 10px rgba(108, 92, 231, 0.3);
+            color: white;
+        }
+
+        /* 5. 탭 스타일링 */
+        .stTabs [data-baseweb="tab-list"] {
+            gap: 8px;
+            background-color: transparent;
+        }
+        .stTabs [data-baseweb="tab"] {
+            height: 45px;
+            border-radius: 10px;
+            background-color: #F0F2F6;
+            border: none;
+            font-weight: 600;
+            color: #666;
+        }
+        .stTabs [aria-selected="true"] {
+            background-color: #6C5CE7 !important;
+            color: white !important;
+        }
+
+        /* 6. 상단 헤더/푸터 숨기기 */
+        header {visibility: hidden;}
+        footer {visibility: hidden;}
+        </style>
+    """, unsafe_allow_html=True)
 
 # =========================================
 # 🗂 3) SQLite 데이터베이스 (users + diaries)
@@ -126,18 +195,13 @@ def add_diary(username, date, emotion, text):
 # =========================================
 @st.cache_resource
 def load_emotion_model():
-    """
-    JUDONGHYEOK/6-emotion-bert-korean-v2
-    원래 라벨: 0:기쁨, 1:분노, 2:불안, 3:슬픔, 4:중립, 5:힘듦
-    → 후처리 없이 그대로 사용
-    """
     try:
         tokenizer = AutoTokenizer.from_pretrained(EMOTION_MODEL_ID)
         model = AutoModelForSequenceClassification.from_pretrained(EMOTION_MODEL_ID)
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         model.to(device)
 
-        # id2label은 int 또는 str key일 수 있으니 둘 다 처리
+        # id2label 처리
         cfg_id2label = getattr(model.config, "id2label", None)
         if isinstance(cfg_id2label, dict) and cfg_id2label:
             id2label = {}
@@ -216,7 +280,6 @@ def recommend_music(emotion):
     if not isinstance(sp, spotipy.Spotify):
         return [{"error": sp}]
 
-    # 감정 키는: 기쁨, 분노, 불안, 슬픔, 중립, 힘듦
     SEARCH_KEYWORDS_MAP = {
         "기쁨": ["신나는 K-Pop", "Upbeat K-Pop", "K-Pop Hits"],
         "슬픔": ["위로가 되는 발라드", "이별 발라드", "새벽 감성"],
@@ -267,21 +330,20 @@ def recommend_music(emotion):
 
 def recommend_movies(emotion):
     key = (
-        st.secrets.get("tmdb", {}).get("api_key", None)
-        or st.secrets.get("TMDB_API_KEY", None)
+        st.secrets.get("tmdb", {}).get("api_key")
+        or st.secrets.get("TMDB_API_KEY")
         or EMERGENCY_TMDB_KEY
     )
     if not key:
         return [{"text": "TMDB 연결 실패", "poster": None}]
 
-    # 감정별 장르 매핑
     GENRES = {
-        "기쁨": "35|10749|10751",      # 코미디/로맨스/가족
-        "분노": "28|12|53",            # 액션/어드벤처/스릴러
-        "불안": "53|9648",             # 스릴러/미스터리
-        "슬픔": "18|10749",            # 드라마/로맨스
-        "힘듦": "18|10751",            # 힐링 계열 드라마/가족
-        "중립": "35|18|10751",         # 무난한 코미디/드라마/가족
+        "기쁨": "35|10749|10751",
+        "분노": "28|12|53",
+        "불안": "53|9648",
+        "슬픔": "18|10749",
+        "힘듦": "18|10751",
+        "중립": "35|18|10751",
     }
 
     try:
@@ -325,19 +387,25 @@ def recommend_movies(emotion):
 # =========================================
 # 🖥️ 6) 화면 구성 (로그인 / 대시보드 / 작성 / 결과)
 # =========================================
+# ⭐️ 디자인 적용
+apply_custom_css()
+
 if "logged_in" not in st.session_state:
     st.session_state.logged_in = False
 if "page" not in st.session_state:
     st.session_state.page = "login"
 
 def login_page():
-    st.title("MOODIARY 💖")
+    st.markdown("<h1 style='text-align: center;'>MOODIARY 💖</h1>", unsafe_allow_html=True)
+    st.markdown("<p style='text-align: center; color: #666;'>당신의 하루를 기록하고, 감정에 맞는 처방을 받아보세요.</p>", unsafe_allow_html=True)
+    st.write("")
+
     tab1, tab2 = st.tabs(["🔑 로그인", "📝 회원가입"])
 
-    # 로그인
     with tab1:
         lid = st.text_input("아이디", key="lid")
         lpw = st.text_input("비밀번호", type="password", key="lpw")
+        st.write("")
         if st.button("로그인", use_container_width=True):
             users = get_all_users()
             if lid in users and str(users[lid]) == str(lpw):
@@ -348,12 +416,10 @@ def login_page():
             else:
                 st.error("정보가 일치하지 않습니다.")
 
-    # 회원가입
     with tab2:
         nid = st.text_input("새 아이디", key="nid")
-        npw = st.text_input(
-            "새 비밀번호 (4자리)", type="password", key="npw", max_chars=4
-        )
+        npw = st.text_input("새 비밀번호 (4자리)", type="password", key="npw", max_chars=4)
+        st.write("")
         if st.button("가입하기", use_container_width=True):
             users = get_all_users()
             if nid in users:
@@ -367,7 +433,7 @@ def login_page():
                     st.error("가입 실패 (DB 오류)")
 
 def dashboard_page():
-    st.title(f"{st.session_state.username}님의 감정 달력 📅")
+    st.markdown(f"### {st.session_state.username}님의 감정 달력 📅")
 
     # 범례
     legend_cols = st.columns(len(EMOTION_META))
@@ -388,23 +454,21 @@ def dashboard_page():
         for date_str, data in my_diaries.items():
             emo = data.get("emotion", "중립")
             meta = EMOTION_META.get(emo, EMOTION_META["중립"])
-            events.append(
-                {
-                    "start": date_str,
-                    "display": "background",
-                    "backgroundColor": meta["color"],
-                }
-            )
-            events.append(
-                {
-                    "title": meta["emoji"],
-                    "start": date_str,
-                    "allDay": True,
-                    "backgroundColor": "transparent",
-                    "borderColor": "transparent",
-                    "textColor": "#000000",
-                }
-            )
+            # 1. 배경색 이벤트 (칸 채우기)
+            events.append({
+                "start": date_str,
+                "display": "background",
+                "backgroundColor": meta["color"],
+            })
+            # 2. 이모티콘 이벤트 (위로 띄우기)
+            events.append({
+                "title": meta["emoji"],
+                "start": date_str,
+                "allDay": True,
+                "backgroundColor": "transparent",
+                "borderColor": "transparent",
+                "textColor": "#000000",
+            })
 
         calendar(
             events=events,
@@ -466,7 +530,7 @@ def dashboard_page():
         )
         st.write("")
 
-    # 📊 이달의 통계
+    # 📊 이달의 통계 (Vega-Lite 차트로 교체)
     with tab2:
         today = datetime.now(KST)
         st.subheader(f"{today.month}월의 감정 통계")
@@ -477,45 +541,38 @@ def dashboard_page():
             if date_str.startswith(current_month_str):
                 month_emotions.append(data.get("emotion", "중립"))
 
-        if month_emotions:
-            df = pd.DataFrame(month_emotions, columns=["emotion"])
-            emotion_counts = (
-                df["emotion"].value_counts().reindex(EMOTION_META.keys(), fill_value=0)
-            )
-        else:
-            emotion_counts = pd.Series(
-                {emo: 0 for emo in EMOTION_META.keys()}, name="emotion"
-            )
-
+        # 데이터프레임 생성
+        df = pd.DataFrame(month_emotions, columns=["emotion"])
+        # 빈 데이터라도 0으로 채워넣기
+        emotion_counts = df["emotion"].value_counts().reindex(EMOTION_META.keys(), fill_value=0)
+        
         chart_data = emotion_counts.reset_index()
         chart_data.columns = ["emotion", "count"]
 
+        # 차트에 사용할 메타 정보 (도메인, 레인지)
         domain = list(EMOTION_META.keys())
         range_ = [meta["color"] for meta in EMOTION_META.values()]
 
+        # Streamlit Vega-Lite Chart 사용 (안정적)
         st.vega_lite_chart(
             chart_data,
             {
                 "title": f"{today.month}월의 감정 분포",
                 "width": "container",
-                "mark": {
-                    "type": "bar",
-                    "cornerRadius": 5,
-                    "opacity": 1.0,
-                },
+                "mark": {"type": "bar", "cornerRadius": 5, "opacity": 1.0}, # 옅은 색상 그대로 사용
                 "encoding": {
                     "x": {
                         "field": "emotion",
                         "type": "nominal",
                         "sort": domain,
                         "title": "감정",
-                        "axis": {"labelAngle": 0},
+                        "axis": {"labelAngle": 0}, # 글자 가로 정렬
                     },
                     "y": {
                         "field": "count",
                         "type": "quantitative",
                         "title": "횟수",
-                        "scale": {"zero": True},
+                        "scale": {"zero": True}, # 0부터 시작
                         "axis": {"format": "d", "tickMinStep": 1},
                     },
                     "color": {
@@ -535,8 +592,9 @@ def dashboard_page():
 
         st.write("---")
         st.write("감정별 횟수:")
-        for emo, count in emotion_counts.items():
-            st.write(f"{EMOTION_META[emo]['emoji']} {emo}: {count}회")
+        cols = st.columns(len(EMOTION_META))
+        for idx, (emo, count) in enumerate(emotion_counts.items()):
+            cols[idx].metric(label=f"{EMOTION_META[emo]['emoji']} {emo}", value=f"{count}회")
 
     st.divider()
 
@@ -556,7 +614,6 @@ def dashboard_page():
                 st.session_state.diary_input = my_diaries[today_str]["text"]
                 st.rerun()
         with col2:
-
             def handle_show_recs():
                 st.session_state.final_emotion = today_emo
                 st.session_state.music_recs = recommend_music(today_emo)
@@ -580,14 +637,15 @@ def result_page():
     emo = st.session_state.final_emotion
     meta = EMOTION_META.get(emo, EMOTION_META["중립"])
 
-    st.markdown(
-        f"<h2 style='text-align: center; color: {meta['color']};'>{meta['emoji']} 오늘의 감정: {emo}</h2>",
-        unsafe_allow_html=True,
-    )
-    st.markdown(
-        f"<h4 style='text-align: center;'>{meta['desc']}</h4>",
-        unsafe_allow_html=True,
-    )
+    # 예쁜 타이틀 박스
+    st.markdown(f"""
+    <div style='text-align: center; padding: 2rem;'>
+        <h2 style='color: {meta['color'].replace('0.4', '1.0').replace('0.2', '1.0')}; font-size: 3rem; margin-bottom: 0.5rem;'>
+            {meta['emoji']} 오늘의 감정: {emo}
+        </h2>
+        <h4 style='color: #555;'>{meta['desc']}</h4>
+    </div>
+    """, unsafe_allow_html=True)
 
     if st.button("⬅️ 달력으로 돌아가기"):
         st.session_state.page = "dashboard"
@@ -632,7 +690,7 @@ def result_page():
                 tc.markdown(
                     f"**{item['title']} ({item['year']})**\n"
                     f"⭐ {item['rating']:.1f}\n\n"
-                    f"*{item.get('overview','')}*"
+                    f"*{item.get('overview','')}*" # 줄거리 전체 표시
                 )
             else:
                 st.error(item.get("text", "로딩 실패"))
@@ -656,6 +714,7 @@ def write_page():
         value=st.session_state.diary_input,
         height=300,
         key="diary_editor",
+        placeholder="여기에 일기를 작성하세요..."
     )
 
     if st.button("🔍 감정 분석하고 저장하기", type="primary", use_container_width=True):
@@ -678,14 +737,9 @@ def write_page():
 # =========================================
 # 🚀 메인 컨트롤러
 # =========================================
-if "logged_in" not in st.session_state:
-    st.session_state.logged_in = False
-if "page" not in st.session_state:
-    st.session_state.page = "login"
-
 if st.session_state.logged_in:
     with st.sidebar:
-        st.write(f"**{st.session_state.username}**님")
+        st.write(f"**{st.session_state.username}**님 환영합니다!")
         if st.button("로그아웃", use_container_width=True):
             st.session_state.logged_in = False
             st.session_state.page = "login"
