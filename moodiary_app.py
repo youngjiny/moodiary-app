@@ -38,7 +38,7 @@ KST = timezone(timedelta(hours=9))
 
 st.set_page_config(layout="wide", page_title="MOODIARY", page_icon="💖")
 
-# ⭐️ 커스텀 CSS (행복 카드 등 디자인)
+# ⭐️ 커스텀 CSS
 def apply_custom_css():
     st.markdown("""
         <style>
@@ -53,7 +53,6 @@ def apply_custom_css():
             margin-top: 2rem;
             max-width: 1000px;
         }
-        /* 버튼 스타일 */
         .stButton > button {
             border-radius: 12px; border: none; background-color: #6C5CE7;
             color: white; font-weight: 700; transition: all 0.3s ease;
@@ -61,7 +60,6 @@ def apply_custom_css():
         .stButton > button:hover {
             background-color: #5b4bc4; transform: translateY(-2px); color: white;
         }
-        /* 행복 저장소 카드 스타일 */
         .happy-card {
             background-color: #FFF9C4; padding: 20px; border-radius: 15px;
             margin-bottom: 15px; box-shadow: 0 2px 5px rgba(0,0,0,0.05);
@@ -73,7 +71,7 @@ def apply_custom_css():
     """, unsafe_allow_html=True)
 
 # =========================================
-# 🗂 DB & 🧠 AI & 🎧 추천 로직 (기존 동일)
+# 🗂 DB & AI & 추천 (로직 동일)
 # =========================================
 @st.cache_resource
 def get_db():
@@ -216,7 +214,7 @@ def login_page():
             if lid in users and str(users[lid]) == str(lpw):
                 st.session_state.logged_in = True
                 st.session_state.username = lid
-                st.session_state.menu = "일기 작성" # 로그인 시 첫 화면
+                st.session_state.menu = "일기 작성"
                 st.rerun()
             else: st.error("정보 불일치")
             
@@ -238,15 +236,23 @@ def main_app():
         st.markdown(f"### 👋 **{st.session_state.username}**님")
         st.write("")
         
-        # ⭐️ 목록 (라디오 버튼) - key='menu'로 세션 상태와 자동 동기화
-        st.radio(
-            "목록",
-            ["일기 작성", "달력 보기", "음악/영화 추천", "통계 보기", "행복 저장소"],
-            key="menu" 
-        )
+        # ⭐️ [수정] key를 제거하고 수동으로 상태를 관리 (오류 해결의 핵심!)
+        menu_options = ["일기 작성", "달력 보기", "음악/영화 추천", "통계 보기", "행복 저장소"]
+        
+        # 현재 세션의 menu가 옵션에 없으면 기본값으로
+        if st.session_state.menu not in menu_options:
+            st.session_state.menu = "일기 작성"
+            
+        current_index = menu_options.index(st.session_state.menu)
+        
+        # 라디오 버튼이 변경되면 st.session_state.menu를 업데이트
+        selected_menu = st.radio("목록", menu_options, index=current_index)
+        
+        if selected_menu != st.session_state.menu:
+            st.session_state.menu = selected_menu
+            st.rerun()
         
         st.divider()
-        # ⭐️ 로그아웃 버튼
         if st.button("로그아웃", use_container_width=True):
             st.session_state.logged_in = False
             st.rerun()
@@ -278,14 +284,14 @@ def page_write():
         with st.spinner("분석 중..."):
             emo, sc = analyze_diary(txt, model, tokenizer, device, id2label)
             st.session_state.final_emotion = emo
-            # 추천 데이터 로드
+            
             st.session_state.music_recs = recommend_music(emo)
             st.session_state.movie_recs = recommend_movies(emo)
-            # DB 저장
+            
             today = datetime.now(KST).strftime("%Y-%m-%d")
             add_diary(st.session_state.username, today, emo, txt)
             
-            # ⭐️ 자연스러운 흐름: 저장 후 추천 페이지로 자동 이동
+            # ⭐️ 저장 후 자연스럽게 페이지 이동
             st.session_state.menu = "음악/영화 추천"
             st.rerun()
 
@@ -316,7 +322,6 @@ def page_calendar():
     today_str = datetime.now(KST).strftime("%Y-%m-%d")
     if today_str in my_diaries:
         if st.button("오늘 일기 확인하러 가기", use_container_width=True):
-            # ⭐️ 자연스러운 흐름: 일기 확인 -> 작성 페이지로 이동 (내용 수정 가능)
             st.session_state.diary_input = my_diaries[today_str]["text"]
             st.session_state.menu = "일기 작성"
             st.rerun()
@@ -327,7 +332,6 @@ def page_calendar():
 
 # --- 페이지: 추천 결과 ---
 def page_recommend():
-    # 분석된 결과가 없으면 최근 일기 기반 로드
     if "final_emotion" not in st.session_state:
         today = datetime.now(KST).strftime("%Y-%m-%d")
         diaries = get_user_diaries(st.session_state.username)
@@ -386,7 +390,6 @@ def page_stats():
     domain = list(EMOTION_META.keys())
     range_ = [m['color'] for m in EMOTION_META.values()]
     
-    # ⭐️⭐️⭐️ [수정완료] 차트 개선: 정수 단위, 가로 라벨, 음수 제거 ⭐️⭐️⭐️
     st.vega_lite_chart(chart_data, {
         "mark": {"type": "bar", "cornerRadius": 5},
         "encoding": {
@@ -394,20 +397,20 @@ def page_stats():
                 "field": "emotion", 
                 "type": "nominal", 
                 "sort": domain, 
-                "axis": {"labelAngle": 0}, # ⭐️ 글자 가로 정렬
+                "axis": {"labelAngle": 0}, 
                 "title": "감정"
             },
             "y": {
                 "field": "count", 
                 "type": "quantitative", 
                 "axis": {
-                    "tickMinStep": 1, # ⭐️ 1단위 (0.5 제거)
-                    "format": "d",    # 정수 포맷
-                    "titleAngle": 0,  # ⭐️ '횟수' 글자 가로로
+                    "tickMinStep": 1, 
+                    "format": "d",
+                    "titleAngle": 0, 
                     "titleAlign": "right",
                     "titleY": -10
                 }, 
-                "scale": {"domainMin": 0}, # ⭐️ 0부터 시작 (음수 방지)
+                "scale": {"domainMin": 0}, 
                 "title": "횟수"
             },
             "color": {"field": "emotion", "scale": {"domain": domain, "range": range_}, "legend": None},
