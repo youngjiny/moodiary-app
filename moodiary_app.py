@@ -75,7 +75,7 @@ def apply_custom_css():
     """, unsafe_allow_html=True)
 
 # =========================================
-# 🔐 3) 구글 시트 데이터베이스 (연결 유지 강화)
+# 🔐 3) 구글 시트 데이터베이스
 # =========================================
 @st.cache_resource
 def get_gsheets_client():
@@ -87,14 +87,12 @@ def get_gsheets_client():
     except Exception as e:
         return None
 
-# ⭐️⭐️⭐️ [핵심 수정] DB 연결을 캐싱하여 끊김 방지 ⭐️⭐️⭐️
-@st.cache_resource(ttl=3600) # 1시간 동안 연결 유지
+@st.cache_resource(ttl=3600)
 def init_db():
     client = get_gsheets_client()
     if not client: return None
     try:
         sh = client.open(GSHEET_DB_NAME)
-        # 워크시트 존재 여부 확인 (접근 테스트)
         sh.worksheet("users")
         sh.worksheet("diaries")
         return sh
@@ -115,8 +113,7 @@ def add_user(sh, username, password):
         return True
     except: return False
 
-# ⭐️ 데이터 가져오기도 캐싱하되, 갱신이 필요할 때를 위해 ttl 짧게 설정
-@st.cache_data(ttl=10) 
+@st.cache_data(ttl=10)
 def get_user_diaries(_sh, username):
     if not _sh: return {}
     try:
@@ -138,8 +135,6 @@ def add_diary(sh, username, date, emotion, text):
             ws.update_cell(cell.row, 4, text)
         else:
             ws.append_row([username, date, emotion, text])
-        
-        # ⭐️ 데이터가 변경되었으므로 캐시를 비워줌 (즉시 반영)
         get_user_diaries.clear()
         return True
     except: return False
@@ -241,12 +236,10 @@ def login_page():
     st.markdown("<h1 style='text-align: center;'>MOODIARY 💖</h1>", unsafe_allow_html=True)
     tab1, tab2 = st.tabs(["🔑 로그인", "📝 회원가입"])
     
-    # ⭐️ DB 연결 안전 장치
     sh = init_db()
     if sh is None: 
         st.warning("⚠️ 데이터베이스 연결 중입니다... 잠시 후 다시 시도해주세요.")
-        if st.button("🔄 새로고침"):
-            st.rerun()
+        if st.button("🔄 새로고침"): st.rerun()
         return
 
     with tab1:
@@ -258,13 +251,10 @@ def login_page():
                 st.session_state.logged_in = True
                 st.session_state.username = lid
                 
-                # 일기 작성 여부 확인 -> 페이지 결정
                 today_str = datetime.now(KST).strftime("%Y-%m-%d")
                 diaries = get_user_diaries(sh, lid)
-                if today_str in diaries:
-                    st.session_state.menu = "달력 보기"
-                else:
-                    st.session_state.menu = "일기 작성"
+                if today_str in diaries: st.session_state.menu = "달력 보기"
+                else: st.session_state.menu = "일기 작성"
                 st.rerun()
             else: st.error("정보 불일치")
             
@@ -283,11 +273,10 @@ def login_page():
 def main_app():
     sh = init_db()
     if sh is None:
-        st.error("데이터베이스 연결이 끊겼습니다. 새로고침 해주세요.")
+        st.error("데이터베이스 연결이 끊겼습니다.")
         if st.button("🔄 새로고침"): st.rerun()
         return
 
-    # --- 사이드바 ---
     with st.sidebar:
         st.markdown(f"### 👋 **{st.session_state.username}**님")
         st.write("")
@@ -306,7 +295,6 @@ def main_app():
             st.session_state.logged_in = False
             st.rerun()
 
-    # --- 라우팅 ---
     if st.session_state.menu == "일기 작성": page_write(sh)
     elif st.session_state.menu == "달력 보기": page_calendar(sh)
     elif st.session_state.menu == "음악/영화 추천": page_recommend(sh)
@@ -331,7 +319,6 @@ def page_write(sh):
             st.session_state.movie_recs = recommend_movies(emo)
             today = datetime.now(KST).strftime("%Y-%m-%d")
             add_diary(sh, st.session_state.username, today, emo, txt)
-            
             st.session_state.menu = "음악/영화 추천"
             st.rerun()
 
@@ -421,17 +408,14 @@ def page_recommend(sh):
                 ic.image(item['poster'], use_container_width=True)
                 tc.markdown(f"**{item['title']} ({item['year']})**\n⭐ {item['rating']}\n\n*{item.get('overview','')}*")
 
+    # ⭐️ 추천 페이지 하단 네비게이션 (달력 제거, 통계/저장소만 유지)
     st.divider()
-    b1, b2, b3 = st.columns(3)
+    b1, b2 = st.columns(2)
     with b1:
-        if st.button("📅 달력 보러가기", use_container_width=True):
-            st.session_state.menu = "달력 보기"
-            st.rerun()
-    with b2:
         if st.button("📊 통계 보러가기", use_container_width=True):
             st.session_state.menu = "통계 보기"
             st.rerun()
-    with b3:
+    with b2:
         if st.button("📂 행복 저장소 가기", use_container_width=True):
             st.session_state.menu = "행복 저장소"
             st.rerun()
@@ -451,7 +435,6 @@ def page_stats(sh):
     
     df = pd.DataFrame(month_data, columns=['emotion'])
     counts = df['emotion'].value_counts().reindex(EMOTION_META.keys(), fill_value=0)
-    
     chart_data = counts.reset_index()
     chart_data.columns = ['emotion', 'count']
     domain = list(EMOTION_META.keys())
@@ -463,19 +446,18 @@ def page_stats(sh):
     st.vega_lite_chart(chart_data, {
         "mark": {"type": "bar", "cornerRadius": 5},
         "encoding": {
-            "x": {
-                "field": "emotion", "type": "nominal", "sort": domain, 
-                "axis": {"labelAngle": 0}, "title": "감정"
-            },
-            "y": {
-                "field": "count", "type": "quantitative", 
-                "axis": {"values": y_values, "format": "d", "titleAngle": 0, "titleAlign": "right", "titleY": -10}, 
-                "scale": {"domainMin": 0}, "title": "횟수"
-            },
+            "x": {"field": "emotion", "type": "nominal", "sort": domain, "axis": {"labelAngle": 0}, "title": "감정"},
+            "y": {"field": "count", "type": "quantitative", "axis": {"values": y_values, "format": "d", "titleAngle": 0, "titleAlign": "right", "titleY": -10}, "scale": {"domainMin": 0}, "title": "횟수"},
             "color": {"field": "emotion", "scale": {"domain": domain, "range": range_}, "legend": None},
             "tooltip": [{"field": "emotion"}, {"field": "count"}]
         }
     }, use_container_width=True)
+
+    # ⭐️ 통계 페이지 하단 네비게이션 (행복 저장소로 이동)
+    st.divider()
+    if st.button("📂 행복 저장소 보러가기", use_container_width=True):
+        st.session_state.menu = "행복 저장소"
+        st.rerun()
 
 def page_happy_storage(sh):
     st.title("행복 저장소 📂")
@@ -489,6 +471,12 @@ def page_happy_storage(sh):
         for date in sorted(happy_moments.keys(), reverse=True):
             data = happy_moments[date]
             st.markdown(f"""<div class="happy-card"><div class="happy-date">{date} {EMOTION_META['기쁨']['emoji']}</div><div class="happy-text">{data['text']}</div></div>""", unsafe_allow_html=True)
+
+    # ⭐️ 행복 저장소 하단 네비게이션 (통계로 이동)
+    st.divider()
+    if st.button("📊 통계 보러가기", use_container_width=True):
+        st.session_state.menu = "통계 보기"
+        st.rerun()
 
 if st.session_state.logged_in: main_app()
 else: login_page()
