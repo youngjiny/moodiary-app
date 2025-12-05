@@ -71,6 +71,11 @@ def apply_custom_css():
         }
         .happy-date { font-size: 0.9em; color: #666; margin-bottom: 5px; }
         .happy-text { font-size: 1.1em; color: #333; }
+        
+        /* 월 이동 버튼 스타일 조정 */
+        div[data-testid="column"] h3 {
+            margin-top: 10px;
+        }
         </style>
     """, unsafe_allow_html=True)
 
@@ -253,8 +258,10 @@ def login_page():
                 
                 today_str = datetime.now(KST).strftime("%Y-%m-%d")
                 diaries = get_user_diaries(sh, lid)
-                if today_str in diaries: st.session_state.menu = "달력 보기"
-                else: st.session_state.menu = "일기 작성"
+                if today_str in diaries:
+                    st.session_state.menu = "달력 보기"
+                else:
+                    st.session_state.menu = "일기 작성"
                 st.rerun()
             else: st.error("정보 불일치")
             
@@ -277,24 +284,7 @@ def main_app():
         if st.button("🔄 새로고침"): st.rerun()
         return
 
-    with st.sidebar:
-        st.markdown(f"### 👋 **{st.session_state.username}**님")
-        st.write("")
-        
-        menu_options = ["일기 작성", "달력 보기", "음악/영화 추천", "통계 보기", "행복 저장소"]
-        if st.session_state.menu not in menu_options: st.session_state.menu = "일기 작성"
-        idx = menu_options.index(st.session_state.menu)
-        
-        selected = st.radio("목록", menu_options, index=idx)
-        if selected != st.session_state.menu:
-            st.session_state.menu = selected
-            st.rerun()
-        
-        st.divider()
-        if st.button("로그아웃", use_container_width=True):
-            st.session_state.logged_in = False
-            st.rerun()
-
+    # --- 페이지 라우팅 ---
     if st.session_state.menu == "일기 작성": page_write(sh)
     elif st.session_state.menu == "달력 보기": page_calendar(sh)
     elif st.session_state.menu == "음악/영화 추천": page_recommend(sh)
@@ -304,6 +294,11 @@ def main_app():
 # --- 페이지 함수들 ---
 def page_write(sh):
     st.title("오늘의 이야기 📝")
+    # 로그아웃 버튼 (모든 페이지 상단 우측에 배치)
+    if st.sidebar.button("로그아웃", key="logout_write"):
+        st.session_state.logged_in = False
+        st.rerun()
+
     model, tokenizer, device, id2label = load_emotion_model()
     if not model: st.error("AI 로드 실패"); return
 
@@ -324,6 +319,10 @@ def page_write(sh):
 
 def page_calendar(sh):
     st.title("감정 달력 📅")
+    if st.sidebar.button("로그아웃", key="logout_cal"):
+        st.session_state.logged_in = False
+        st.rerun()
+
     cols = st.columns(6)
     for i, (k, v) in enumerate(EMOTION_META.items()):
         cols[i].markdown(f"<span style='color:{v['color']};'>●</span> {k}", unsafe_allow_html=True)
@@ -370,6 +369,10 @@ def page_calendar(sh):
             st.rerun()
 
 def page_recommend(sh):
+    if st.sidebar.button("로그아웃", key="logout_rec"):
+        st.session_state.logged_in = False
+        st.rerun()
+
     if "final_emotion" not in st.session_state:
         today = datetime.now(KST).strftime("%Y-%m-%d")
         diaries = get_user_diaries(sh, st.session_state.username)
@@ -408,8 +411,8 @@ def page_recommend(sh):
                 ic.image(item['poster'], use_container_width=True)
                 tc.markdown(f"**{item['title']} ({item['year']})**\n⭐ {item['rating']}\n\n*{item.get('overview','')}*")
 
-    # ⭐️ 추천 페이지 하단 네비게이션 (달력 제거, 통계/저장소만 유지)
     st.divider()
+    # ⭐️ 수정된 추천 페이지 하단 버튼
     b1, b2 = st.columns(2)
     with b1:
         if st.button("📊 통계 보러가기", use_container_width=True):
@@ -422,19 +425,51 @@ def page_recommend(sh):
 
 def page_stats(sh):
     st.title("나의 감정 통계 📊")
+    if st.sidebar.button("로그아웃", key="logout_stats"):
+        st.session_state.logged_in = False
+        st.rerun()
+
+    # ⭐️ 월 네비게이션을 위한 상태 관리
+    if "stats_year" not in st.session_state:
+        now = datetime.now(KST)
+        st.session_state.stats_year = now.year
+        st.session_state.stats_month = now.month
+
+    # ⭐️ 월 이동 버튼 UI
+    c1, c2, c3 = st.columns([0.2, 0.6, 0.2])
+    with c1:
+        if st.button("◀️ 전월", use_container_width=True):
+            if st.session_state.stats_month == 1:
+                st.session_state.stats_year -= 1
+                st.session_state.stats_month = 12
+            else:
+                st.session_state.stats_month -= 1
+            st.rerun()
+    with c2:
+        st.markdown(f"<h2 style='text-align: center; margin:0;'>{st.session_state.stats_year}년 {st.session_state.stats_month}월</h2>", unsafe_allow_html=True)
+    with c3:
+        if st.button("익월 ▶️", use_container_width=True):
+            if st.session_state.stats_month == 12:
+                st.session_state.stats_year += 1
+                st.session_state.stats_month = 1
+            else:
+                st.session_state.stats_month += 1
+            st.rerun()
+    st.write("")
+
+    # 데이터 필터링
     my_diaries = get_user_diaries(sh, st.session_state.username)
-    today = datetime.now(KST)
-    cur_month = today.strftime("%Y-%m")
-    st.subheader(f"{today.month}월의 감정 분포")
+    target_prefix = f"{st.session_state.stats_year}-{st.session_state.stats_month:02d}"
     
     month_data = []
     for date, d in my_diaries.items():
-        if date.startswith(cur_month):
+        if date.startswith(target_prefix):
             e = d['emotion']
             if e in EMOTION_META: month_data.append(e)
     
     df = pd.DataFrame(month_data, columns=['emotion'])
     counts = df['emotion'].value_counts().reindex(EMOTION_META.keys(), fill_value=0)
+    
     chart_data = counts.reset_index()
     chart_data.columns = ['emotion', 'count']
     domain = list(EMOTION_META.keys())
@@ -446,14 +481,20 @@ def page_stats(sh):
     st.vega_lite_chart(chart_data, {
         "mark": {"type": "bar", "cornerRadius": 5},
         "encoding": {
-            "x": {"field": "emotion", "type": "nominal", "sort": domain, "axis": {"labelAngle": 0}, "title": "감정"},
-            "y": {"field": "count", "type": "quantitative", "axis": {"values": y_values, "format": "d", "titleAngle": 0, "titleAlign": "right", "titleY": -10}, "scale": {"domainMin": 0}, "title": "횟수"},
+            "x": {
+                "field": "emotion", "type": "nominal", "sort": domain, 
+                "axis": {"labelAngle": 0}, "title": "감정"
+            },
+            "y": {
+                "field": "count", "type": "quantitative", 
+                "axis": {"values": y_values, "format": "d", "titleAngle": 0, "titleAlign": "right", "titleY": -10}, 
+                "scale": {"domainMin": 0}, "title": "횟수"
+            },
             "color": {"field": "emotion", "scale": {"domain": domain, "range": range_}, "legend": None},
             "tooltip": [{"field": "emotion"}, {"field": "count"}]
         }
     }, use_container_width=True)
 
-    # ⭐️ 통계 페이지 하단 네비게이션 (행복 저장소로 이동)
     st.divider()
     if st.button("📂 행복 저장소 보러가기", use_container_width=True):
         st.session_state.menu = "행복 저장소"
@@ -461,6 +502,10 @@ def page_stats(sh):
 
 def page_happy_storage(sh):
     st.title("행복 저장소 📂")
+    if st.sidebar.button("로그아웃", key="logout_happy"):
+        st.session_state.logged_in = False
+        st.rerun()
+
     st.markdown("내가 **'기쁨'**을 느꼈던 순간들을 모아보세요.")
     my_diaries = get_user_diaries(sh, st.session_state.username)
     happy_moments = {date: data for date, data in my_diaries.items() if data['emotion'] == '기쁨'}
@@ -472,7 +517,6 @@ def page_happy_storage(sh):
             data = happy_moments[date]
             st.markdown(f"""<div class="happy-card"><div class="happy-date">{date} {EMOTION_META['기쁨']['emoji']}</div><div class="happy-text">{data['text']}</div></div>""", unsafe_allow_html=True)
 
-    # ⭐️ 행복 저장소 하단 네비게이션 (통계로 이동)
     st.divider()
     if st.button("📊 통계 보러가기", use_container_width=True):
         st.session_state.menu = "통계 보기"
