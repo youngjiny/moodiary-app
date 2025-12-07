@@ -42,11 +42,11 @@ KST = timezone(timedelta(hours=9))
 
 st.set_page_config(layout="wide", page_title="MOODIARY", page_icon="💖")
 
-# ⭐️ 커스텀 CSS (Sidebar 안정화 및 폰트 통일)
+# ⭐️ 커스텀 CSS (Sidebar 안정화 및 기본 폰트 통일)
 def apply_custom_css():
     st.markdown("""
         <style>
-        /* 1. 폰트 설정 (Noto Sans KR로 통일) */
+        /* 1. 폰트 설정 (Noto Sans KR로 통일 - 기본 글꼴 요청 반영) */
         @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;700&display=swap');
         
         html, body, [class*="css"] { font-family: 'Noto Sans KR', sans-serif; }
@@ -96,27 +96,44 @@ def apply_custom_css():
             filter: brightness(1.1);
             color: white;
         }
-
-        /* 5. ⭐️ [핵심] 사이드바 메뉴 버튼 안정화 */
-        section[data-testid="stSidebar"] .stButton > button {
-            background: none; /* 배경색 제거 */
+        
+        /* 5. 사이드바 st.radio 메뉴 스타일링 (목차 명확화) */
+        section[data-testid="stSidebar"] .stRadio > div[role="radiogroup"] {
             border: none;
-            color: #333;
-            text-align: left;
-            padding: 10px 0;
-            margin-bottom: 5px;
-            font-weight: 600;
-            box-shadow: none;
-            transition: color 0.1s;
+            padding: 0;
+            /* 라디오 버튼 간격 조정 */
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
         }
-        section[data-testid="stSidebar"] .stButton > button:hover {
-            color: #6C5CE7; /* 호버 시 색상만 변경 */
-            background: none;
-            transform: none;
-            text-decoration: underline;
+        section[data-testid="stSidebar"] .stRadio > div[role="radiogroup"] label {
+            /* 일반적인 버튼 형태를 유지하면서 클릭 영역 명확화 */
+            background: #f8f9fa; 
+            border-radius: 8px;
+            padding: 10px 15px;
+            margin-bottom: 0px; 
+            box-shadow: none;
+            transition: background-color 0.1s, color 0.1s;
+        }
+        section[data-testid="stSidebar"] .stRadio > div[role="radiogroup"] label:hover {
+            background: #eee;
+        }
+        /* 선택된 메뉴 강조 */
+        section[data-testid="stSidebar"] .stRadio > div[role="radiogroup"] label[data-checked='true'] {
+            background: #6C5CE7;
+            color: white !important;
+            font-weight: 700;
+        }
+        section[data-testid="stSidebar"] .stRadio > div[role="radiogroup"] label[data-checked='true'] p {
+            color: white !important;
+        }
+        /* 라디오 버튼 원 숨기기 (메뉴처럼 보이도록) */
+        section[data-testid="stSidebar"] .stRadio > div[role="radiogroup"] label span:first-child {
+            display: none !important;
         }
 
-        /* 6. 행복 저장소 카드 (글씨 강조) */
+
+        /* 6. 행복 저장소 카드 */
         .happy-card {
             background: linear-gradient(135deg, #fff9c4 0%, #fff176 100%);
             padding: 25px;
@@ -124,9 +141,10 @@ def apply_custom_css():
             box-shadow: 0 4px 15px rgba(0,0,0,0.08);
             border-left: 6px solid #FFD700;
         }
+        .happy-date { font-size: 1em; color: #795548; font-weight: bold; margin-bottom: 12px; }
         .happy-text {
-            font-size: 1.4em; /* ⭐️ 글씨 크기 강조 */
-            font-weight: 600; /* ⭐️ 글씨 굵기 강조 */
+            font-size: 1.4em; 
+            font-weight: 600; 
             line-height: 1.5;
             color: #2c3e50;
         }
@@ -142,6 +160,7 @@ def apply_custom_css():
 @st.cache_resource
 def get_gsheets_client():
     try:
+        # st.secrets에서 gsheets 연결 정보를 가져옵니다.
         creds = st.secrets["connections"]["gsheets"]
         scope = ['https://www.googleapis.com/auth/spreadsheets', 'https://www.googleapis.com/auth/drive']
         credentials = Credentials.from_service_account_info(creds, scopes=scope)
@@ -155,6 +174,7 @@ def init_db():
     if not client: return None
     try:
         sh = client.open(GSHEET_DB_NAME)
+        # 필요한 워크시트가 있는지 확인만 합니다.
         sh.worksheet("users")
         sh.worksheet("diaries")
         return sh
@@ -193,10 +213,13 @@ def add_diary(sh, username, date, emotion, text):
         ws = sh.worksheet("diaries")
         cell = ws.find(date, in_column=2)
         if cell and str(ws.cell(cell.row, 1).value) == str(username):
+            # 이미 같은 날짜에 일기가 있으면 업데이트
             ws.update_cell(cell.row, 3, emotion)
             ws.update_cell(cell.row, 4, text)
         else:
+            # 없으면 추가
             ws.append_row([username, date, emotion, text])
+        # 캐시 초기화
         get_user_diaries.clear()
         return True
     except: return False
@@ -299,10 +322,11 @@ def intro_page():
     st.write("")
     c1, c2, c3 = st.columns([1, 2, 1])
     with c2:
+        # 기본 폰트 및 스타일로 복구
         st.markdown("""
             <div style='text-align: center; padding: 40px; border-radius: 20px;'>
-                <h1 class='intro-title'>MOODIARY</h1>
-                <h3 class='intro-subtitle'>당신의 감정은?</h3>
+                <h1 style='font-size: 5rem; color: #6C5CE7; margin-bottom: 0;'>MOODIARY</h1>
+                <h3 style='color: #888; font-weight: normal;'>당신의 감정은?</h3>
                 <br>
             </div>
         """, unsafe_allow_html=True)
@@ -369,18 +393,37 @@ def main_app():
         if st.button("🔄 새로고침"): st.rerun()
         return
 
-    # --- 사이드바 ---
+    # --- 사이드바 (목차) ---
     with st.sidebar:
         st.markdown(f"### 👋 **{st.session_state.username}**님")
         st.write("")
         
-        # ⭐️ [복구] 사이드바 메뉴 (목차)
-        if st.button("📝 일기 작성", use_container_width=True, key="sb_write"): st.session_state.page = "write"; st.rerun()
-        if st.button("📅 달력 보기", use_container_width=True, key="sb_calendar"): st.session_state.page = "dashboard"; st.rerun()
-        if st.button("🎵 음악/영화 추천", use_container_width=True, key="sb_recommend"): st.session_state.page = "result"; st.rerun()
-        if st.button("📊 통계 보기", use_container_width=True, key="sb_stats"): st.session_state.page = "stats"; st.rerun()
-        if st.button("📂 행복 저장소", use_container_width=True, key="sb_happy"): st.session_state.page = "happy"; st.rerun()
+        # ⭐️ [핵심] st.radio를 사용한 안정적인 메뉴(목차) 구현
+        PAGE_MAP = {
+            "📝 일기 작성": "write",
+            "📅 감정 달력": "dashboard",
+            "🎵 음악/영화 추천": "result",
+            "📊 감정 통계": "stats",
+            "📂 행복 저장소": "happy"
+        }
         
+        # 현재 페이지의 레이블을 찾음 (기본값: 일기 작성)
+        # st.session_state.page가 PAGE_MAP의 값 중 하나가 아닐 경우를 대비해 'get' 사용
+        current_page_key = next((k for k, v in PAGE_MAP.items() if v == st.session_state.page), list(PAGE_MAP.keys())[0])
+        
+        # 메뉴(목차) 위젯
+        new_page_label = st.radio(
+            "메뉴 (목차)",
+            list(PAGE_MAP.keys()),
+            index=list(PAGE_MAP.keys()).index(current_page_key),
+            key="sidebar_menu"
+        )
+        
+        # 페이지 변경 감지 및 이동 (즉시 전환)
+        if PAGE_MAP[new_page_label] != st.session_state.page:
+            st.session_state.page = PAGE_MAP[new_page_label]
+            st.rerun()
+
         st.divider()
         if st.button("🚪 로그아웃", use_container_width=True):
             st.session_state.logged_in = False
@@ -507,11 +550,11 @@ def page_recommend(sh):
     st.divider()
     b1, b2, b3 = st.columns(3)
     with b1:
-        if st.button("📅 달력 보기", use_container_width=True): st.session_state.page = "dashboard"; st.rerun()
+        if st.button("📅 달력 보기", use_container_width=True, key="rec_cal"): st.session_state.page = "dashboard"; st.rerun()
     with b2:
-        if st.button("📊 통계 보기", use_container_width=True): st.session_state.page = "stats"; st.rerun()
+        if st.button("📊 통계 보기", use_container_width=True, key="rec_stat"): st.session_state.page = "stats"; st.rerun()
     with b3:
-        if st.button("📂 행복 저장소", use_container_width=True): st.session_state.page = "happy"; st.rerun()
+        if st.button("📂 행복 저장소", use_container_width=True, key="rec_happy"): st.session_state.page = "happy"; st.rerun()
 
 def page_stats(sh):
     st.markdown("## 📊 나의 감정 통계")
@@ -557,10 +600,9 @@ def page_stats(sh):
     domain = list(EMOTION_META.keys())
     range_ = [m['color'].replace('0.6', '1.0').replace('0.5', '1.0') for m in EMOTION_META.values()] 
     
-    max_val = int(chart_data['count'].max()) if not chart_data.empty else 5
-    y_values = list(range(0, max_val + 2))
-
     if month_data:
+        max_val = int(chart_data['count'].max())
+        y_values = list(range(0, max_val + 2))
         most_common_emo = max(set(month_data), key=month_data.count)
         total_count = len(month_data)
 
