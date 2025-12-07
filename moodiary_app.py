@@ -24,7 +24,7 @@ except ImportError:
 # --- 2) 기본 설정 ---
 EMOTION_MODEL_ID = "JUDONGHYEOK/6-emotion-bert-korean-v2"
 TMDB_BASE_URL = "https://api.themoviedb.org/3"
-GSHEET_DB_NAME = "moodiary_db"
+GSHEET_DB_NAME = "moodiary_db" 
 
 # 비상용 TMDB 키
 EMERGENCY_TMDB_KEY = "8587d6734fd278ecc05dcbe710c29f9c"
@@ -49,9 +49,7 @@ def apply_custom_css():
         /* 1. 폰트 설정 */
         @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;700&display=swap');
         
-        html, body, [class*="css"] {
-            font-family: 'Noto Sans KR', sans-serif;
-        }
+        html, body, [class*="css"] { font-family: 'Noto Sans KR', sans-serif; }
         
         /* 2. 배경 애니메이션 */
         @keyframes gradient {
@@ -76,7 +74,7 @@ def apply_custom_css():
             max-width: 1000px;
         }
         
-        /* 4. 버튼 스타일 */
+        /* 4. 버튼 스타일 (메인) */
         .stButton > button {
             width: 100%;
             border-radius: 20px;
@@ -94,39 +92,47 @@ def apply_custom_css():
             filter: brightness(1.1);
             color: white;
         }
-
-        /* 5. 행복 저장소 카드 (글씨 강조) */
-        .happy-card {
-            background: linear-gradient(135deg, #fff9c4 0%, #fff176 100%);
-            padding: 25px;
-            border-radius: 20px;
-            margin-bottom: 20px;
-            box-shadow: 0 4px 15px rgba(0,0,0,0.08);
-            border-left: 6px solid #FFD700;
-            transition: transform 0.2s;
-        }
-        .happy-date { font-size: 1em; color: #795548; font-weight: bold; margin-bottom: 12px; }
-        .happy-text {
-            font-size: 1.4em; /* 글씨 크기 강조 */
-            font-weight: 600; /* 글씨 굵기 강조 */
-            line-height: 1.5;
-            color: #2c3e50;
-        }
-
-        /* 6. 통계 요약 카드 */
-        .stat-card {
-            background: white; padding: 20px; border-radius: 15px;
-            box-shadow: 0 4px 10px rgba(0,0,0,0.05); text-align: center;
-        }
-        .stat-value { font-size: 2rem; font-weight: bold; color: #6C5CE7; }
-        .stat-label { color: #888; font-size: 0.9rem; }
         
-        /* 7. 로그인 박스 스타일 */
-        .login-box {
-            background: rgba(255, 255, 255, 0.6);
-            padding: 2rem;
-            border-radius: 20px;
-            border: 1px solid rgba(255, 255, 255, 0.8);
+        /* 5. 사이드바 메뉴 스타일링 (라디오 버튼을 메뉴처럼 보이게) */
+        section[data-testid="stSidebar"] .stRadio > div[role="radiogroup"] {
+            border: none;
+            padding: 0;
+        }
+        section[data-testid="stSidebar"] .stRadio > div[role="radiogroup"] label {
+            background: #f8f9fa; /* 배경색 */
+            border-radius: 10px;
+            margin-bottom: 5px;
+            padding: 10px 15px;
+            box-shadow: none;
+            transition: background-color 0.1s;
+        }
+        section[data-testid="stSidebar"] .stRadio > div[role="radiogroup"] label:hover {
+            background: #eee;
+        }
+        section[data-testid="stSidebar"] .stRadio > div[role="radiogroup"] label[data-checked='true'] {
+            background: #6C5CE7;
+            color: white !important;
+        }
+        section[data-testid="stSidebar"] .stRadio > div[role="radiogroup"] label[data-checked='true'] p {
+            color: white !important;
+        }
+
+        /* 6. 표지(Intro) 스타일 */
+        .intro-title {
+            font-size: 6rem;
+            font-weight: 800;
+            background: linear-gradient(to right, #6C5CE7, #FF7675);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            margin-bottom: 1rem;
+            text-align: center;
+        }
+        .intro-subtitle {
+            font-size: 2.5rem;
+            color: #555;
+            text-align: center;
+            margin-bottom: 3rem;
+            font-family: 'Gamja Flower', cursive !important;
         }
 
         header {visibility: hidden;}
@@ -298,14 +304,13 @@ def intro_page():
     c1, c2, c3 = st.columns([1, 2, 1])
     with c2:
         st.markdown("""
-            <div style='text-align: center; background: rgba(255, 255, 255, 0.7); padding: 40px; border-radius: 20px;'>
-                <h1 style='font-size: 5rem; color: #6C5CE7; margin-bottom: 0;'>MOODIARY</h1>
-                <h3 style='color: #888; font-weight: normal;'>당신의 감정은?</h3>
+            <div style='text-align: center; padding: 40px; border-radius: 20px;'>
+                <h1 class='intro-title'>MOODIARY</h1>
+                <h3 class='intro-subtitle'>당신의 감정은?</h3>
                 <br>
             </div>
         """, unsafe_allow_html=True)
-        # ⭐️ 클릭 트리거 버튼
-        if st.button("화면을 클릭하여 시작하세요 👇", use_container_width=True, key="intro_start"):
+        if st.button("✨ 내 마음 기록하러 가기", use_container_width=True):
             st.session_state.page = "login"
             st.rerun()
 
@@ -313,7 +318,6 @@ def intro_page():
 def login_page():
     sh = init_db()
     
-    # 6:4 비율로 왼쪽은 문구, 오른쪽은 로그인 폼
     c1, c2 = st.columns([0.6, 0.4])
 
     with c1:
@@ -331,23 +335,24 @@ def login_page():
         if sh is None:
             st.warning("⚠️ DB 연결 중...")
             if st.button("🔄 새로고침"): st.rerun()
-        else:
-            with tab1:
-                lid = st.text_input("아이디", key="lid")
-                lpw = st.text_input("비밀번호", type="password", key="lpw")
-                if st.button("로그인", use_container_width=True):
-                    users = get_all_users(sh)
-                    if str(lid) in users and str(users[str(lid)]) == str(lpw):
-                        st.session_state.logged_in = True
-                        st.session_state.username = lid
-                        
-                        today_str = datetime.now(KST).strftime("%Y-%m-%d")
-                        diaries = get_user_diaries(sh, lid)
-                        if today_str in diaries: st.session_state.page = "dashboard"
-                        else: st.session_state.page = "write"
-                        st.rerun()
-                    else: st.error("아이디/비밀번호 오류")
+            return
+
+        with tab1:
+            lid = st.text_input("아이디", key="lid")
+            lpw = st.text_input("비밀번호", type="password", key="lpw")
+            if st.button("로그인", use_container_width=True):
+                users = get_all_users(sh)
+                if str(lid) in users and str(users[str(lid)]) == str(lpw):
+                    st.session_state.logged_in = True
+                    st.session_state.username = lid
                     
+                    today_str = datetime.now(KST).strftime("%Y-%m-%d")
+                    diaries = get_user_diaries(sh, lid)
+                    if today_str in diaries: st.session_state.page = "dashboard"
+                    else: st.session_state.page = "write"
+                    st.rerun()
+                else: st.error("아이디/비밀번호 오류")
+                
             with tab2:
                 nid = st.text_input("새 아이디", key="nid")
                 npw = st.text_input("새 비밀번호 (4자리)", type="password", key="npw", max_chars=4)
@@ -364,7 +369,7 @@ def login_page():
 def main_app():
     sh = init_db()
     if sh is None:
-        st.error("데이터베이스 연결 끊김.")
+        st.error("데이터베이스 연결 끊김. 새로고침 해주세요.")
         if st.button("🔄 새로고침"): st.rerun()
         return
 
@@ -373,9 +378,10 @@ def main_app():
         st.markdown(f"### 👋 **{st.session_state.username}**님")
         st.write("")
         
+        # ⭐️ 사이드바 메뉴 (목차 복구)
         if st.button("📝 일기 작성", use_container_width=True): st.session_state.page = "write"; st.rerun()
         if st.button("📅 달력 보기", use_container_width=True): st.session_state.page = "dashboard"; st.rerun()
-        if st.button("🎵 추천 보기", use_container_width=True): st.session_state.page = "result"; st.rerun()
+        if st.button("🎵 음악/영화 추천", use_container_width=True): st.session_state.page = "result"; st.rerun()
         if st.button("📊 통계 보기", use_container_width=True): st.session_state.page = "stats"; st.rerun()
         if st.button("📂 행복 저장소", use_container_width=True): st.session_state.page = "happy"; st.rerun()
         
@@ -462,6 +468,8 @@ def page_dashboard(sh):
             st.rerun()
 
 def page_recommend(sh):
+    st.markdown("## 🎵 음악/영화 추천")
+
     if "final_emotion" not in st.session_state:
         today = datetime.now(KST).strftime("%Y-%m-%d")
         diaries = get_user_diaries(sh, st.session_state.username)
@@ -503,17 +511,11 @@ def page_recommend(sh):
     st.divider()
     b1, b2, b3 = st.columns(3)
     with b1:
-        if st.button("📅 달력 보기", use_container_width=True):
-            st.session_state.page = "dashboard"
-            st.rerun()
+        if st.button("📅 달력 보기", use_container_width=True): st.session_state.page = "dashboard"; st.rerun()
     with b2:
-        if st.button("📊 통계 보기", use_container_width=True):
-            st.session_state.page = "stats"
-            st.rerun()
+        if st.button("📊 통계 보기", use_container_width=True): st.session_state.page = "stats"; st.rerun()
     with b3:
-        if st.button("📂 행복 저장소", use_container_width=True):
-            st.session_state.page = "happy"
-            st.rerun()
+        if st.button("📂 행복 저장소", use_container_width=True): st.session_state.page = "happy"; st.rerun()
 
 def page_stats(sh):
     st.markdown("## 📊 나의 감정 통계")
