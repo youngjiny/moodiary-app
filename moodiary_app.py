@@ -46,7 +46,6 @@ st.set_page_config(layout="wide", page_title="MOODIARY", page_icon="💖")
 def apply_custom_css():
     st.markdown("""
         <style>
-        /* 1. 폰트 설정 (Noto Sans KR 통일) */
         @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;700&display=swap');
         
         html, body, [class*="css"] { font-family: 'Noto Sans KR', sans-serif; }
@@ -75,7 +74,7 @@ def apply_custom_css():
             max-width: 1000px;
         }
         
-        /* 4. 버튼 스타일 */
+        /* 4. 버튼 스타일 (메인) */
         .stButton > button {
             width: 100%; border-radius: 20px; border: none;
             background: linear-gradient(90deg, #6C5CE7 0%, #a29bfe 100%);
@@ -87,30 +86,36 @@ def apply_custom_css():
             filter: brightness(1.1); color: white;
         }
 
-        /* 5. 사이드바 메뉴 버튼 (안정화) */
-        section[data-testid="stSidebar"] .stButton > button {
-            background: none; color: #333; text-align: left; padding: 10px 0;
-            font-weight: 600; box-shadow: none; border-radius: 0;
+        /* 5. 사이드바 메뉴 st.radio 스타일링 (가장 안정적인 목록 구현) */
+        section[data-testid="stSidebar"] .stRadio > div[role="radiogroup"] {
+            border: none; padding: 0; gap: 5px; /* 간격 설정 */
         }
-        section[data-testid="stSidebar"] .stButton > button:hover {
-            color: #6C5CE7; background: none; transform: none;
+        section[data-testid="stSidebar"] .stRadio > div[role="radiogroup"] label {
+            background: #f8f9fa; border-radius: 8px; padding: 10px 15px;
+            transition: background-color 0.1s;
         }
-
-        /* 6. 행복 저장소 카드 (글씨 강조) */
-        .happy-card {
-            background: linear-gradient(135deg, #fff9c4 0%, #fff176 100%);
-            padding: 25px; border-radius: 20px; margin-bottom: 20px;
-            box-shadow: 0 4px 15px rgba(0,0,0,0.08); border-left: 6px solid #FFD700;
+        section[data-testid="stSidebar"] .stRadio > div[role="radiogroup"] label:hover {
+            background: #eee;
         }
-        .happy-text { font-size: 1.4em; font-weight: 600; line-height: 1.5; color: #2c3e50; }
-
-        /* 7. 로그인 박스 스타일 */
-        .login-box {
-            background: rgba(255, 255, 255, 0.6); padding: 2rem; border-radius: 20px;
-            border: 1px solid rgba(255, 255, 255, 0.8);
+        /* 선택된 메뉴 강조 */
+        section[data-testid="stSidebar"] .stRadio > div[role="radiogroup"] label[data-checked='true'] {
+            background: #6C5CE7;
+            color: white !important;
+            font-weight: 700;
+        }
+        section[data-testid="stSidebar"] .stRadio > div[role="radiogroup"] label[data-checked='true'] p {
+            color: white !important;
         }
 
-        header {visibility: hidden;} footer {visibility: hidden;}
+        /* 6. 표지(Intro) 스타일 */
+        .intro-title {
+            font-size: 5rem; font-weight: 800;
+            background: linear-gradient(to right, #6C5CE7, #a29bfe);
+            -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+        }
+
+        header {visibility: hidden;}
+        footer {visibility: hidden;}
         </style>
     """, unsafe_allow_html=True)
 
@@ -250,35 +255,16 @@ def recommend_music(emotion):
 def recommend_movies(emotion):
     key = st.secrets.get("tmdb", {}).get("api_key") or st.secrets.get("TMDB_API_KEY") or EMERGENCY_TMDB_KEY
     if not key: return [{"text": "API 키 없음", "poster": None}]
-    
-    # ⭐️ 장르 코드 한글화 및 정의
-    GENRES = {
-        "기쁨": "35|10749", # 코미디 | 로맨스
-        "분노": "28|12|53", # 액션 | 어드벤처 | 스릴러
-        "불안": "53|9648", # 스릴러 | 미스터리
-        "슬픔": "18|10749", # 드라마 | 로맨스
-        "힘듦": "18|10402", # 드라마 | 음악
-        "중립": "35|18" # 코미디 | 드라마
-    }
-    
+    GENRES = {"기쁨": "35|10749", "분노": "28|12", "불안": "16|10751", "슬픔": "18", "힘듦": "18|10402", "중립": "35|18"}
     try:
         r = requests.get(f"{TMDB_BASE_URL}/discover/movie", params={
             "api_key": key, "language": "ko-KR", "sort_by": "popularity.desc",
             "with_genres": GENRES.get(emotion, "18"), "without_genres": "16",
             "page": random.randint(1, 5), "vote_count.gte": 500, "primary_release_date.gte": "2000-01-01"
-            # ⭐️ [수정 반영] TMDB 필터링 강화: 7.5점 이상만 재확인
         }, timeout=5)
         results = r.json().get("results", [])
-        
-        # ⭐️ 평점 7.5 이상만 Python에서 최종 필터링
-        filtered_results = [
-            m for m in results
-            if m.get("vote_average", 0.0) >= 7.5 
-            and m.get("vote_count", 0) >= 500
-        ]
-        
-        if not filtered_results: return [{"text": "조건에 맞는 영화가 없습니다.", "poster": None}]
-        picks = random.sample(filtered_results, min(3, len(filtered_results)))
+        if not results: return [{"text": "영화 없음", "poster": None}]
+        picks = random.sample(results, min(3, len(results)))
         return [{"title": m["title"], "year": (m.get("release_date") or "")[:4], "rating": m["vote_average"], "overview": m["overview"], "poster": f"https://image.tmdb.org/t/p/w500{m['poster_path']}" if m.get("poster_path") else None} for m in picks]
     except Exception as e: return [{"text": f"오류: {e}", "poster": None}]
 
@@ -326,7 +312,7 @@ def login_page():
         tab1, tab2 = st.tabs(["🔑 로그인", "📝 회원가입"])
         
         if sh is None:
-            st.warning("⚠️ DB 연결 중...")
+            st.warning("⚠️ DB 연결 중입니다...")
             if st.button("🔄 새로고침"): st.rerun()
             return
 
@@ -366,12 +352,12 @@ def main_app():
         if st.button("🔄 새로고침"): st.rerun()
         return
 
-    # --- 사이드바 ---
+    # --- 사이드바 (목차) ---
     with st.sidebar:
         st.markdown(f"### 👋 **{st.session_state.username}**님")
         st.write("")
         
-        # ⭐️ 목차 (안정적인 st.radio로 구현)
+        # ⭐️ [복구] 안정적인 st.radio 메뉴 구현
         PAGE_MAP = {
             "📝 일기 작성": "write",
             "📅 감정 달력": "dashboard",
@@ -380,12 +366,11 @@ def main_app():
             "📂 행복 저장소": "happy"
         }
         
-        # 현재 페이지의 레이블 찾기
         current_page_key = next((k for k, v in PAGE_MAP.items() if v == st.session_state.page), list(PAGE_MAP.keys())[0])
         idx = list(PAGE_MAP.keys()).index(current_page_key)
         
         # st.radio를 사용 (가장 안정적인 메뉴 구현)
-        selected = st.radio("목차", list(PAGE_MAP.keys()), index=idx, key="sidebar_menu")
+        selected = st.radio("목차", list(PAGE_MAP.keys()), index=idx, key="sidebar_menu_radio")
         
         if PAGE_MAP[selected] != st.session_state.page:
             st.session_state.page = PAGE_MAP[selected]
