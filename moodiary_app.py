@@ -42,15 +42,19 @@ KST = timezone(timedelta(hours=9))
 
 st.set_page_config(layout="wide", page_title="MOODIARY", page_icon="💖")
 
-# ⭐️ 커스텀 CSS (글래스모피즘 + Sidebar 복구)
+# ⭐️ 커스텀 CSS (Sidebar 안정화 및 폰트 통일)
 def apply_custom_css():
     st.markdown("""
         <style>
-        /* 1. 폰트 설정 */
+        /* 1. 폰트 설정 (Noto Sans KR로 통일) */
         @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;700&display=swap');
         
         html, body, [class*="css"] { font-family: 'Noto Sans KR', sans-serif; }
-        
+        h1, h2, h3, .stMarkdown h1, .stMarkdown h2, .stMarkdown h3 { 
+            font-family: 'Noto Sans KR', sans-serif !important; 
+            font-weight: 700;
+        }
+
         /* 2. 배경 애니메이션 */
         @keyframes gradient {
             0% {background-position: 0% 50%;}
@@ -92,47 +96,39 @@ def apply_custom_css():
             filter: brightness(1.1);
             color: white;
         }
-        
-        /* 5. 사이드바 메뉴 스타일링 (라디오 버튼을 메뉴처럼 보이게) */
-        section[data-testid="stSidebar"] .stRadio > div[role="radiogroup"] {
+
+        /* 5. ⭐️ [핵심] 사이드바 메뉴 버튼 안정화 */
+        section[data-testid="stSidebar"] .stButton > button {
+            background: none; /* 배경색 제거 */
             border: none;
-            padding: 0;
-        }
-        section[data-testid="stSidebar"] .stRadio > div[role="radiogroup"] label {
-            background: #f8f9fa; /* 배경색 */
-            border-radius: 10px;
+            color: #333;
+            text-align: left;
+            padding: 10px 0;
             margin-bottom: 5px;
-            padding: 10px 15px;
+            font-weight: 600;
             box-shadow: none;
-            transition: background-color 0.1s;
+            transition: color 0.1s;
         }
-        section[data-testid="stSidebar"] .stRadio > div[role="radiogroup"] label:hover {
-            background: #eee;
-        }
-        section[data-testid="stSidebar"] .stRadio > div[role="radiogroup"] label[data-checked='true'] {
-            background: #6C5CE7;
-            color: white !important;
-        }
-        section[data-testid="stSidebar"] .stRadio > div[role="radiogroup"] label[data-checked='true'] p {
-            color: white !important;
+        section[data-testid="stSidebar"] .stButton > button:hover {
+            color: #6C5CE7; /* 호버 시 색상만 변경 */
+            background: none;
+            transform: none;
+            text-decoration: underline;
         }
 
-        /* 6. 표지(Intro) 스타일 */
-        .intro-title {
-            font-size: 6rem;
-            font-weight: 800;
-            background: linear-gradient(to right, #6C5CE7, #FF7675);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            margin-bottom: 1rem;
-            text-align: center;
+        /* 6. 행복 저장소 카드 (글씨 강조) */
+        .happy-card {
+            background: linear-gradient(135deg, #fff9c4 0%, #fff176 100%);
+            padding: 25px;
+            border-radius: 20px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.08);
+            border-left: 6px solid #FFD700;
         }
-        .intro-subtitle {
-            font-size: 2.5rem;
-            color: #555;
-            text-align: center;
-            margin-bottom: 3rem;
-            font-family: 'Gamja Flower', cursive !important;
+        .happy-text {
+            font-size: 1.4em; /* ⭐️ 글씨 크기 강조 */
+            font-weight: 600; /* ⭐️ 글씨 굵기 강조 */
+            line-height: 1.5;
+            color: #2c3e50;
         }
 
         header {visibility: hidden;}
@@ -310,7 +306,7 @@ def intro_page():
                 <br>
             </div>
         """, unsafe_allow_html=True)
-        if st.button("✨ 내 마음 기록하러 가기", use_container_width=True):
+        if st.button("✨ 내 마음 기록하러 가기", use_container_width=True, key="intro_start"):
             st.session_state.page = "login"
             st.rerun()
 
@@ -378,12 +374,12 @@ def main_app():
         st.markdown(f"### 👋 **{st.session_state.username}**님")
         st.write("")
         
-        # ⭐️ 사이드바 메뉴 (목차 복구)
-        if st.button("📝 일기 작성", use_container_width=True): st.session_state.page = "write"; st.rerun()
-        if st.button("📅 달력 보기", use_container_width=True): st.session_state.page = "dashboard"; st.rerun()
-        if st.button("🎵 음악/영화 추천", use_container_width=True): st.session_state.page = "result"; st.rerun()
-        if st.button("📊 통계 보기", use_container_width=True): st.session_state.page = "stats"; st.rerun()
-        if st.button("📂 행복 저장소", use_container_width=True): st.session_state.page = "happy"; st.rerun()
+        # ⭐️ [복구] 사이드바 메뉴 (목차)
+        if st.button("📝 일기 작성", use_container_width=True, key="sb_write"): st.session_state.page = "write"; st.rerun()
+        if st.button("📅 달력 보기", use_container_width=True, key="sb_calendar"): st.session_state.page = "dashboard"; st.rerun()
+        if st.button("🎵 음악/영화 추천", use_container_width=True, key="sb_recommend"): st.session_state.page = "result"; st.rerun()
+        if st.button("📊 통계 보기", use_container_width=True, key="sb_stats"): st.session_state.page = "stats"; st.rerun()
+        if st.button("📂 행복 저장소", use_container_width=True, key="sb_happy"): st.session_state.page = "happy"; st.rerun()
         
         st.divider()
         if st.button("🚪 로그아웃", use_container_width=True):
@@ -564,20 +560,33 @@ def page_stats(sh):
     max_val = int(chart_data['count'].max()) if not chart_data.empty else 5
     y_values = list(range(0, max_val + 2))
 
-    st.vega_lite_chart(chart_data, {
-        "mark": {"type": "bar", "cornerRadius": 10},
-        "encoding": {
-            "x": {"field": "emotion", "type": "nominal", "sort": domain, 
-                  "axis": {"labelAngle": 0, "labelFontSize": 12}, "title": "감정"},
-            "y": {
-                "field": "count", "type": "quantitative", 
-                "axis": {"values": y_values, "format": "d", "titleAngle": 0, "titleAlign": "right", "titleY": -10}, 
-                "scale": {"domainMin": 0}, "title": "횟수"
-            },
-            "color": {"field": "emotion", "scale": {"domain": domain, "range": range_}, "legend": None},
-            "tooltip": [{"field": "emotion"}, {"field": "count"}]
-        }
-    }, use_container_width=True)
+    if month_data:
+        most_common_emo = max(set(month_data), key=month_data.count)
+        total_count = len(month_data)
+
+        sc1, sc2 = st.columns(2)
+        sc1.markdown(f"""<div class='stat-card'><div class='stat-value'>{total_count}개</div><div class='stat-label'>총 기록 수</div></div>""", unsafe_allow_html=True)
+        sc2.markdown(f"""<div class='stat-card'><div class='stat-value'>{EMOTION_META[most_common_emo]['emoji']} {most_common_emo}</div><div class='stat-label'>가장 많이 느낀 감정</div></div>""", unsafe_allow_html=True)
+        st.write("")
+        
+        st.vega_lite_chart(chart_data, {
+            "mark": {"type": "bar", "cornerRadius": 10},
+            "encoding": {
+                "x": {
+                    "field": "emotion", "type": "nominal", "sort": domain, 
+                    "axis": {"labelAngle": 0, "labelFontSize": 12}, "title": "감정"
+                },
+                "y": {
+                    "field": "count", "type": "quantitative", 
+                    "axis": {"values": y_values, "format": "d", "titleAngle": 0, "titleAlign": "right", "titleY": -10}, 
+                    "scale": {"domainMin": 0}, "title": "횟수"
+                },
+                "color": {"field": "emotion", "scale": {"domain": domain, "range": range_}, "legend": None},
+                "tooltip": [{"field": "emotion"}, {"field": "count"}]
+            }
+        }, use_container_width=True)
+    else:
+        st.info("이 달에는 작성된 일기가 없습니다.")
 
     st.divider()
     if st.button("📂 행복 저장소 보러가기", use_container_width=True):
