@@ -42,20 +42,16 @@ KST = timezone(timedelta(hours=9))
 
 st.set_page_config(layout="wide", page_title="MOODIARY", page_icon="💖")
 
-# ⭐️ 커스텀 CSS (Sidebar 안정화 및 기본 폰트 통일)
+# ⭐️ 커스텀 CSS
 def apply_custom_css():
     st.markdown("""
         <style>
-        /* 1. 폰트 설정 (Noto Sans KR로 통일 - 기본 글꼴 요청 반영) */
         @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;700&display=swap');
         
         html, body, [class*="css"] { font-family: 'Noto Sans KR', sans-serif; }
-        h1, h2, h3, .stMarkdown h1, .stMarkdown h2, .stMarkdown h3 { 
-            font-family: 'Noto Sans KR', sans-serif !important; 
-            font-weight: 700;
-        }
+        h1, h2, h3, .stMarkdown h1, .stMarkdown h2, .stMarkdown h3 { font-family: 'Noto Sans KR', sans-serif !important; font-weight: 700; }
 
-        /* 2. 배경 애니메이션 */
+        /* 배경 */
         @keyframes gradient {
             0% {background-position: 0% 50%;}
             50% {background-position: 100% 50%;}
@@ -67,7 +63,7 @@ def apply_custom_css():
             animation: gradient 15s ease infinite;
         }
 
-        /* 3. 메인 컨테이너 (글래스모피즘) */
+        /* 컨테이너 (글래스모피즘) */
         .block-container {
             background: rgba(255, 255, 255, 0.85);
             backdrop-filter: blur(15px);
@@ -78,75 +74,22 @@ def apply_custom_css():
             max-width: 1000px;
         }
         
-        /* 4. 버튼 스타일 (메인) */
+        /* 버튼 스타일 */
         .stButton > button {
-            width: 100%;
-            border-radius: 20px;
-            border: none;
+            width: 100%; border-radius: 20px; border: none;
             background: linear-gradient(90deg, #6C5CE7 0%, #a29bfe 100%);
-            color: white;
-            font-weight: 700;
-            padding: 0.6rem 1rem;
-            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
-            transition: all 0.3s ease;
+            color: white; font-weight: 700; padding: 0.6rem 1rem;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1); transition: all 0.3s ease;
         }
-        .stButton > button:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 6px 12px rgba(0,0,0,0.15);
-            filter: brightness(1.1);
-            color: white;
-        }
-        
-        /* 5. 사이드바 st.radio 메뉴 스타일링 (목차 명확화) */
-        section[data-testid="stSidebar"] .stRadio > div[role="radiogroup"] {
-            border: none;
-            padding: 0;
-            /* 라디오 버튼 간격 조정 */
-            display: flex;
-            flex-direction: column;
-            gap: 5px;
-        }
-        section[data-testid="stSidebar"] .stRadio > div[role="radiogroup"] label {
-            /* 일반적인 버튼 형태를 유지하면서 클릭 영역 명확화 */
-            background: #f8f9fa; 
-            border-radius: 8px;
-            padding: 10px 15px;
-            margin-bottom: 0px; 
-            box-shadow: none;
-            transition: background-color 0.1s, color 0.1s;
-        }
-        section[data-testid="stSidebar"] .stRadio > div[role="radiogroup"] label:hover {
-            background: #eee;
-        }
-        /* 선택된 메뉴 강조 */
-        section[data-testid="stSidebar"] .stRadio > div[role="radiogroup"] label[data-checked='true'] {
-            background: #6C5CE7;
-            color: white !important;
-            font-weight: 700;
-        }
-        section[data-testid="stSidebar"] .stRadio > div[role="radiogroup"] label[data-checked='true'] p {
-            color: white !important;
-        }
-        /* 라디오 버튼 원 숨기기 (메뉴처럼 보이도록) */
-        section[data-testid="stSidebar"] .stRadio > div[role="radiogroup"] label span:first-child {
-            display: none !important;
-        }
+        .stButton > button:hover { transform: translateY(-2px); filter: brightness(1.1); }
 
-
-        /* 6. 행복 저장소 카드 */
-        .happy-card {
-            background: linear-gradient(135deg, #fff9c4 0%, #fff176 100%);
-            padding: 25px;
-            border-radius: 20px;
-            box-shadow: 0 4px 15px rgba(0,0,0,0.08);
-            border-left: 6px solid #FFD700;
+        /* 사이드바 메뉴 버튼 (안정화) */
+        section[data-testid="stSidebar"] .stButton > button {
+            background: none; color: #333; text-align: left; padding: 10px 0;
+            font-weight: 600; box-shadow: none; border-radius: 0;
         }
-        .happy-date { font-size: 1em; color: #795548; font-weight: bold; margin-bottom: 12px; }
-        .happy-text {
-            font-size: 1.4em; 
-            font-weight: 600; 
-            line-height: 1.5;
-            color: #2c3e50;
+        section[data-testid="stSidebar"] .stButton > button:hover {
+            color: #6C5CE7; background: none; transform: none;
         }
 
         header {visibility: hidden;}
@@ -155,17 +98,18 @@ def apply_custom_css():
     """, unsafe_allow_html=True)
 
 # =========================================
-# 🔐 3) 구글 시트 데이터베이스
+# 🔐 3) 구글 시트 데이터베이스 (에러 진단 강화)
 # =========================================
 @st.cache_resource
 def get_gsheets_client():
     try:
-        # st.secrets에서 gsheets 연결 정보를 가져옵니다.
         creds = st.secrets["connections"]["gsheets"]
         scope = ['https://www.googleapis.com/auth/spreadsheets', 'https://www.googleapis.com/auth/drive']
         credentials = Credentials.from_service_account_info(creds, scopes=scope)
         return gspread.authorize(credentials)
     except Exception as e:
+        # ⭐️ 인증 실패 시 상세 오류 출력
+        st.error(f"❌ 인증 실패: secrets.toml 문제 또는 GCP 권한 에러. (에러 유형: {type(e).__name__})")
         return None
 
 @st.cache_resource(ttl=3600)
@@ -174,11 +118,12 @@ def init_db():
     if not client: return None
     try:
         sh = client.open(GSHEET_DB_NAME)
-        # 필요한 워크시트가 있는지 확인만 합니다.
         sh.worksheet("users")
         sh.worksheet("diaries")
         return sh
-    except:
+    except Exception as e:
+        # ⭐️ 시트 접근 실패 시 상세 오류 출력 (시트 이름, 공유 권한 문제)
+        st.error(f"❌ DB 연결 실패: 시트 이름/공유 권한 확인 필요. (에러 유형: {type(e).__name__})")
         return None 
 
 def get_all_users(sh):
@@ -213,13 +158,10 @@ def add_diary(sh, username, date, emotion, text):
         ws = sh.worksheet("diaries")
         cell = ws.find(date, in_column=2)
         if cell and str(ws.cell(cell.row, 1).value) == str(username):
-            # 이미 같은 날짜에 일기가 있으면 업데이트
             ws.update_cell(cell.row, 3, emotion)
             ws.update_cell(cell.row, 4, text)
         else:
-            # 없으면 추가
             ws.append_row([username, date, emotion, text])
-        # 캐시 초기화
         get_user_diaries.clear()
         return True
     except: return False
@@ -322,11 +264,10 @@ def intro_page():
     st.write("")
     c1, c2, c3 = st.columns([1, 2, 1])
     with c2:
-        # 기본 폰트 및 스타일로 복구
         st.markdown("""
             <div style='text-align: center; padding: 40px; border-radius: 20px;'>
-                <h1 style='font-size: 5rem; color: #6C5CE7; margin-bottom: 0;'>MOODIARY</h1>
-                <h3 style='color: #888; font-weight: normal;'>당신의 감정은?</h3>
+                <h1 class='intro-title' style='font-size: 5rem;'>MOODIARY</h1>
+                <h3 class='intro-subtitle' style='font-size: 2.5rem;'>당신의 감정은?</h3>
                 <br>
             </div>
         """, unsafe_allow_html=True)
@@ -398,30 +339,22 @@ def main_app():
         st.markdown(f"### 👋 **{st.session_state.username}**님")
         st.write("")
         
-        # ⭐️ [핵심] st.radio를 사용한 안정적인 메뉴(목차) 구현
-        PAGE_MAP = {
+        # ⭐️ [복구] 안정적인 st.radio 메뉴 구현
+        page_options = {
             "📝 일기 작성": "write",
             "📅 감정 달력": "dashboard",
             "🎵 음악/영화 추천": "result",
-            "📊 감정 통계": "stats",
+            "📊 통계 보기": "stats",
             "📂 행복 저장소": "happy"
         }
         
-        # 현재 페이지의 레이블을 찾음 (기본값: 일기 작성)
-        # st.session_state.page가 PAGE_MAP의 값 중 하나가 아닐 경우를 대비해 'get' 사용
-        current_page_key = next((k for k, v in PAGE_MAP.items() if v == st.session_state.page), list(PAGE_MAP.keys())[0])
+        current_page_key = next((k for k, v in page_options.items() if v == st.session_state.page), list(page_options.keys())[0])
+        idx = list(page_options.keys()).index(current_page_key)
         
-        # 메뉴(목차) 위젯
-        new_page_label = st.radio(
-            "메뉴 (목차)",
-            list(PAGE_MAP.keys()),
-            index=list(PAGE_MAP.keys()).index(current_page_key),
-            key="sidebar_menu"
-        )
+        selected = st.radio("목차", list(page_options.keys()), index=idx)
         
-        # 페이지 변경 감지 및 이동 (즉시 전환)
-        if PAGE_MAP[new_page_label] != st.session_state.page:
-            st.session_state.page = PAGE_MAP[new_page_label]
+        if page_options[selected] != st.session_state.page:
+            st.session_state.page = page_options[selected]
             st.rerun()
 
         st.divider()
@@ -601,7 +534,7 @@ def page_stats(sh):
     range_ = [m['color'].replace('0.6', '1.0').replace('0.5', '1.0') for m in EMOTION_META.values()] 
     
     if month_data:
-        max_val = int(chart_data['count'].max())
+        max_val = int(chart_data['count'].max()) if not chart_data.empty else 5
         y_values = list(range(0, max_val + 2))
         most_common_emo = max(set(month_data), key=month_data.count)
         total_count = len(month_data)
