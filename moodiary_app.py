@@ -42,16 +42,17 @@ KST = timezone(timedelta(hours=9))
 
 st.set_page_config(layout="wide", page_title="MOODIARY", page_icon="💖")
 
-# ⭐️ 커스텀 CSS
+# ⭐️ 커스텀 CSS (최종 디자인)
 def apply_custom_css():
     st.markdown("""
         <style>
+        /* 1. 폰트 설정 (Noto Sans KR 통일) */
         @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;700&display=swap');
         
         html, body, [class*="css"] { font-family: 'Noto Sans KR', sans-serif; }
-        h1, h2, h3, .stMarkdown h1, .stMarkdown h2, .stMarkdown h3 { font-family: 'Noto Sans KR', sans-serif !important; font-weight: 700; }
+        h1, h2, h3, .stMarkdown h1, .stMarkdown h2, .stMarkdown h3 { font-weight: 700; }
 
-        /* 배경 */
+        /* 2. 배경 애니메이션 */
         @keyframes gradient {
             0% {background-position: 0% 50%;}
             50% {background-position: 100% 50%;}
@@ -63,7 +64,7 @@ def apply_custom_css():
             animation: gradient 15s ease infinite;
         }
 
-        /* 컨테이너 (글래스모피즘) */
+        /* 3. 메인 컨테이너 (글래스모피즘) */
         .block-container {
             background: rgba(255, 255, 255, 0.85);
             backdrop-filter: blur(15px);
@@ -74,16 +75,19 @@ def apply_custom_css():
             max-width: 1000px;
         }
         
-        /* 버튼 스타일 */
+        /* 4. 버튼 스타일 */
         .stButton > button {
             width: 100%; border-radius: 20px; border: none;
             background: linear-gradient(90deg, #6C5CE7 0%, #a29bfe 100%);
             color: white; font-weight: 700; padding: 0.6rem 1rem;
             box-shadow: 0 4px 6px rgba(0,0,0,0.1); transition: all 0.3s ease;
         }
-        .stButton > button:hover { transform: translateY(-2px); filter: brightness(1.1); }
+        .stButton > button:hover {
+            transform: translateY(-2px); box-shadow: 0 6px 12px rgba(0,0,0,0.15);
+            filter: brightness(1.1); color: white;
+        }
 
-        /* 사이드바 메뉴 버튼 (안정화) */
+        /* 5. 사이드바 메뉴 버튼 (안정화) */
         section[data-testid="stSidebar"] .stButton > button {
             background: none; color: #333; text-align: left; padding: 10px 0;
             font-weight: 600; box-shadow: none; border-radius: 0;
@@ -92,38 +96,44 @@ def apply_custom_css():
             color: #6C5CE7; background: none; transform: none;
         }
 
-        header {visibility: hidden;}
-        footer {visibility: hidden;}
+        /* 6. 행복 저장소 카드 */
+        .happy-card {
+            background: linear-gradient(135deg, #fff9c4 0%, #fff176 100%);
+            padding: 25px; border-radius: 20px; margin-bottom: 20px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.08); border-left: 6px solid #FFD700;
+        }
+        .happy-text { font-size: 1.4em; font-weight: 600; line-height: 1.5; color: #2c3e50; }
+
+        header {visibility: hidden;} footer {visibility: hidden;}
         </style>
     """, unsafe_allow_html=True)
 
 # =========================================
-# 🔐 3) 구글 시트 데이터베이스 (에러 진단 강화)
+# 🔐 3) 구글 시트 데이터베이스
 # =========================================
 @st.cache_resource
 def get_gsheets_client():
     try:
-        creds = st.secrets["connections"]["gsheets"]
+        # ⭐️ [핵심 수정] secrets에서 [gsheets] 경로로 바로 접근
+        creds = st.secrets["gsheets"] 
         scope = ['https://www.googleapis.com/auth/spreadsheets', 'https://www.googleapis.com/auth/drive']
         credentials = Credentials.from_service_account_info(creds, scopes=scope)
         return gspread.authorize(credentials)
     except Exception as e:
-        # ⭐️ 인증 실패 시 상세 오류 출력
-        st.error(f"❌ 인증 실패: secrets.toml 문제 또는 GCP 권한 에러. (에러 유형: {type(e).__name__})")
+        # 이 함수가 실패하면 secrets.toml 구조가 잘못된 것입니다.
         return None
 
 @st.cache_resource(ttl=3600)
 def init_db():
     client = get_gsheets_client()
-    if not client: return None
+    if not client: return None # secrets 로드 실패 시 None 반환
     try:
         sh = client.open(GSHEET_DB_NAME)
         sh.worksheet("users")
         sh.worksheet("diaries")
         return sh
-    except Exception as e:
-        # ⭐️ 시트 접근 실패 시 상세 오류 출력 (시트 이름, 공유 권한 문제)
-        st.error(f"❌ DB 연결 실패: 시트 이름/공유 권한 확인 필요. (에러 유형: {type(e).__name__})")
+    except:
+        # 시트 이름 또는 공유 권한 문제가 있다면 None 반환
         return None 
 
 def get_all_users(sh):
@@ -266,8 +276,8 @@ def intro_page():
     with c2:
         st.markdown("""
             <div style='text-align: center; padding: 40px; border-radius: 20px;'>
-                <h1 class='intro-title' style='font-size: 5rem;'>MOODIARY</h1>
-                <h3 class='intro-subtitle' style='font-size: 2.5rem;'>당신의 감정은?</h3>
+                <h1 style='font-size: 5rem; color: #6C5CE7; margin-bottom: 0;'>MOODIARY</h1>
+                <h3 style='color: #888; font-weight: normal;'>당신의 감정은?</h3>
                 <br>
             </div>
         """, unsafe_allow_html=True)
@@ -294,7 +304,7 @@ def login_page():
         tab1, tab2 = st.tabs(["🔑 로그인", "📝 회원가입"])
         
         if sh is None:
-            st.warning("⚠️ DB 연결 중...")
+            st.warning("⚠️ DB 연결 중입니다... 잠시 후 다시 시도해주세요.")
             if st.button("🔄 새로고침"): st.rerun()
             return
 
@@ -339,7 +349,7 @@ def main_app():
         st.markdown(f"### 👋 **{st.session_state.username}**님")
         st.write("")
         
-        # ⭐️ [복구] 안정적인 st.radio 메뉴 구현
+        # ⭐️ [목차 복구] 안정적인 st.radio로 변경됨
         page_options = {
             "📝 일기 작성": "write",
             "📅 감정 달력": "dashboard",
@@ -351,7 +361,8 @@ def main_app():
         current_page_key = next((k for k, v in page_options.items() if v == st.session_state.page), list(page_options.keys())[0])
         idx = list(page_options.keys()).index(current_page_key)
         
-        selected = st.radio("목차", list(page_options.keys()), index=idx)
+        # st.radio를 사용 (가장 안정적인 메뉴 구현)
+        selected = st.radio("목차", list(page_options.keys()), index=idx, key="sidebar_menu_radio")
         
         if page_options[selected] != st.session_state.page:
             st.session_state.page = page_options[selected]
