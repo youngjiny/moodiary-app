@@ -29,7 +29,6 @@ GSHEET_DB_NAME = "moodiary_db"
 # 비상용 TMDB 키
 EMERGENCY_TMDB_KEY = "8587d6734fd278ecc05dcbe710c29f9c"
 
-# ⭐️ [색상 복구] 기쁨(노랑), 분노(빨강), 불안(주황), 슬픔(파랑), 힘듦(회색), 중립(초록)
 EMOTION_META = {
     "기쁨": {"color": "rgba(255, 215, 0, 0.6)", "emoji": "😆", "desc": "웃음이 끊이지 않는 하루!"},
     "분노": {"color": "rgba(255, 80, 80, 0.6)", "emoji": "🤬", "desc": "워워, 진정이 필요해요."},
@@ -43,19 +42,15 @@ KST = timezone(timedelta(hours=9))
 
 st.set_page_config(layout="wide", page_title="MOODIARY", page_icon="💖")
 
-# ⭐️ 커스텀 CSS (글래스모피즘 + 행복 저장소 글씨 강조)
+# ⭐️ 커스텀 CSS (글래스모피즘 + Sidebar 복구)
 def apply_custom_css():
     st.markdown("""
         <style>
         /* 1. 폰트 설정 */
-        @import url('https://fonts.googleapis.com/css2?family=Gamja+Flower&family=Noto+Sans+KR:wght@300;400;700&display=swap');
+        @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;700&display=swap');
         
-        html, body, [class*="css"] {
-            font-family: 'Noto Sans KR', sans-serif;
-        }
-        h1, h2, h3 {
-            font-family: 'Gamja Flower', cursive !important;
-        }
+        html, body, [class*="css"] { font-family: 'Noto Sans KR', sans-serif; }
+        h1, h2, h3 { font-family: 'Noto Sans KR', sans-serif !important; } /* 제목 폰트 통일 */
 
         /* 2. 배경 애니메이션 */
         @keyframes gradient {
@@ -69,7 +64,7 @@ def apply_custom_css():
             animation: gradient 15s ease infinite;
         }
 
-        /* 3. 컨테이너 (글래스모피즘) */
+        /* 3. 메인 컨테이너 (글래스모피즘) */
         .block-container {
             background: rgba(255, 255, 255, 0.85);
             backdrop-filter: blur(15px);
@@ -79,8 +74,8 @@ def apply_custom_css():
             margin-top: 2rem;
             max-width: 1000px;
         }
-
-        /* 4. 버튼 스타일 */
+        
+        /* 4. 버튼 스타일 (메인) */
         .stButton > button {
             width: 100%;
             border-radius: 20px;
@@ -98,47 +93,28 @@ def apply_custom_css():
             filter: brightness(1.1);
             color: white;
         }
-
-        /* 5. 행복 저장소 카드 (글씨 강조) */
-        .happy-card {
-            background: linear-gradient(135deg, #fff9c4 0%, #fff176 100%);
-            padding: 25px;
-            border-radius: 20px;
-            margin-bottom: 20px;
-            box-shadow: 0 4px 15px rgba(0,0,0,0.08);
-            border-left: 6px solid #FFD700;
-            transition: transform 0.2s;
-            color: #444;
-            position: relative;
+        
+        /* 5. 사이드바 버튼 (메인 버튼과 분리된 스타일) */
+        section[data-testid="stSidebar"] .stButton > button {
+            background: #eee; /* 메뉴 배경색 */
+            color: #333;
+            border-radius: 10px;
+            font-weight: 600;
+            margin-bottom: 5px;
+            box-shadow: none;
+            transition: background-color 0.1s ease;
         }
-        .happy-card:hover {
-            transform: translateY(-5px);
+        section[data-testid="stSidebar"] .stButton > button:hover {
+            background: #ddd;
+            transform: none;
         }
-        .happy-date {
-            font-size: 1em;
-            color: #795548;
-            font-weight: bold;
-            margin-bottom: 12px;
-            border-bottom: 1px dashed #fbc02d;
-            padding-bottom: 5px;
+        section[data-testid="stSidebar"] h3 {
+            font-size: 1.5rem !important;
         }
-        .happy-text {
-            font-size: 1.4em; /* ⭐️ 글씨 크기 키움 */
-            font-weight: 600; /* ⭐️ 글씨 굵게 */
-            line-height: 1.5;
-            font-family: 'Gamja Flower', cursive;
-            color: #2c3e50;
-        }
-
-        /* 6. 통계 요약 카드 */
-        .stat-card {
-            background: white; padding: 20px; border-radius: 15px;
-            box-shadow: 0 4px 10px rgba(0,0,0,0.05); text-align: center;
-        }
-        .stat-value { font-size: 2rem; font-weight: bold; color: #6C5CE7; }
-        .stat-label { color: #888; font-size: 0.9rem; }
-
-        header {visibility: hidden;} footer {visibility: hidden;}
+        
+        /* 헤더/푸터 숨김 */
+        header {visibility: hidden;}
+        footer {visibility: hidden;}
         </style>
     """, unsafe_allow_html=True)
 
@@ -297,102 +273,74 @@ def recommend_movies(emotion):
 apply_custom_css()
 
 if "logged_in" not in st.session_state: st.session_state.logged_in = False
-if "page" not in st.session_state: st.session_state.page = "intro" # 첫 시작
-
-# 0. 표지
-def intro_page():
-    st.write("")
-    st.write("")
-    c1, c2, c3 = st.columns([1, 2, 1])
-    with c2:
-        st.markdown("""
-            <div style='text-align: center;'>
-                <h1 style='font-size: 5rem; color: #6C5CE7; margin-bottom: 0;'>MOODIARY</h1>
-                <h3 style='color: #888; font-weight: normal;'>당신의 감정은?</h3>
-                <br>
-            </div>
-        """, unsafe_allow_html=True)
-        if st.button("✨ 내 마음 기록하러 가기", use_container_width=True):
-            st.session_state.page = "login"
-            st.rerun()
+if "page" not in st.session_state: st.session_state.page = "intro"
 
 # 1. 로그인 페이지
 def login_page():
-    sh = init_db()
+    st.markdown("<h1 style='text-align: center;'>MOODIARY 💖</h1>", unsafe_allow_html=True)
+    tab1, tab2 = st.tabs(["🔑 로그인", "📝 회원가입"])
     
-    c1, c2 = st.columns([0.6, 0.4])
+    sh = init_db()
+    if sh is None: 
+        st.warning("⚠️ 데이터베이스 연결 중입니다...")
+        if st.button("🔄 새로고침"): st.rerun()
+        return
 
-    with c1:
-        st.markdown("""
-            <div style='padding-top: 5rem;'>
-                <h1 style='font-size: 4rem; color:#333;'>MOODIARY</h1>
-                <p style='font-size: 1.5rem; color:#555;'>오늘의 감정을 기록하고<br>나를 위한 처방을 받아보세요.</p>
-            </div>
-        """, unsafe_allow_html=True)
-
-    with c2:
-        st.markdown("<div class='login-box' style='background: rgba(255,255,255,0.6); padding: 2rem; border-radius: 20px;'>", unsafe_allow_html=True)
-        tab1, tab2 = st.tabs(["🔑 로그인", "📝 회원가입"])
-        
-        if sh is None:
-            st.warning("⚠️ DB 연결 중...")
-            if st.button("🔄 새로고침"): st.rerun()
-        else:
-            with tab1:
-                lid = st.text_input("아이디", key="lid")
-                lpw = st.text_input("비밀번호", type="password", key="lpw")
-                if st.button("로그인", use_container_width=True):
-                    users = get_all_users(sh)
-                    if str(lid) in users and str(users[str(lid)]) == str(lpw):
-                        st.session_state.logged_in = True
-                        st.session_state.username = lid
-                        
-                        today_str = datetime.now(KST).strftime("%Y-%m-%d")
-                        diaries = get_user_diaries(sh, lid)
-                        if today_str in diaries: st.session_state.page = "dashboard"
-                        else: st.session_state.page = "write"
-                        st.rerun()
-                    else: st.error("아이디/비밀번호 오류")
-                    
-            with tab2:
-                nid = st.text_input("새 아이디", key="nid")
-                npw = st.text_input("새 비밀번호 (4자리)", type="password", key="npw", max_chars=4)
-                if st.button("가입하기", use_container_width=True):
-                    users = get_all_users(sh)
-                    if str(nid) in users: st.error("이미 존재함")
-                    elif len(nid)<1 or len(npw)!=4: st.error("형식 확인 (비번 4자리)")
-                    else:
-                        if add_user(sh, nid, npw): st.success("가입 성공! 로그인하세요.")
-                        else: st.error("가입 실패")
-        st.markdown("</div>", unsafe_allow_html=True)
+    with tab1:
+        lid = st.text_input("아이디", key="lid")
+        lpw = st.text_input("비밀번호", type="password", key="lpw")
+        if st.button("로그인", use_container_width=True):
+            users = get_all_users(sh)
+            if str(lid) in users and str(users[str(lid)]) == str(lpw):
+                st.session_state.logged_in = True
+                st.session_state.username = lid
+                
+                today_str = datetime.now(KST).strftime("%Y-%m-%d")
+                diaries = get_user_diaries(sh, lid)
+                if today_str in diaries: st.session_state.menu = "달력 보기"
+                else: st.session_state.menu = "일기 작성"
+                st.rerun()
+            else: st.error("정보 불일치")
+            
+    with tab2:
+        nid = st.text_input("새 아이디", key="nid")
+        npw = st.text_input("새 비밀번호 (4자리)", type="password", key="npw", max_chars=4)
+        if st.button("가입하기", use_container_width=True):
+            users = get_all_users(sh)
+            if str(nid) in users: st.error("이미 존재함")
+            elif len(nid)<1 or len(npw)!=4: st.error("형식 확인")
+            else:
+                if add_user(sh, nid, npw): st.success("성공! 로그인하세요")
+                else: st.error("실패")
 
 # 2. 메인 앱
 def main_app():
     sh = init_db()
     if sh is None:
-        st.error("데이터베이스 연결 끊김. 새로고침 해주세요.")
+        st.error("데이터베이스 연결이 끊겼습니다.")
         if st.button("🔄 새로고침"): st.rerun()
         return
 
-    # 사이드바 메뉴
+    # --- 사이드바 (목록 복구) ---
     with st.sidebar:
         st.markdown(f"### 👋 **{st.session_state.username}**님")
         st.write("")
         
-        if st.button("📝 일기 작성", use_container_width=True):
-            st.session_state.page = "write"
+        # ⭐️ 사이드바 메뉴 (목차) - button으로 복구
+        if st.button("📝 일기 작성", use_container_width=True, key="sb_write"):
+            st.session_state.menu = "일기 작성"
             st.rerun()
-        if st.button("📅 달력 보기", use_container_width=True):
-            st.session_state.page = "dashboard"
+        if st.button("📅 달력 보기", use_container_width=True, key="sb_calendar"):
+            st.session_state.menu = "달력 보기"
             st.rerun()
-        if st.button("🎵 추천 보기", use_container_width=True):
-            st.session_state.page = "result"
+        if st.button("🎵 음악/영화 추천", use_container_width=True, key="sb_recommend"):
+            st.session_state.menu = "음악/영화 추천"
             st.rerun()
-        if st.button("📊 통계 보기", use_container_width=True):
-            st.session_state.page = "stats"
+        if st.button("📊 통계 보기", use_container_width=True, key="sb_stats"):
+            st.session_state.menu = "통계 보기"
             st.rerun()
-        if st.button("📂 행복 저장소", use_container_width=True):
-            st.session_state.page = "happy"
+        if st.button("📂 행복 저장소", use_container_width=True, key="sb_happy"):
+            st.session_state.menu = "행복 저장소"
             st.rerun()
         
         st.divider()
@@ -401,12 +349,12 @@ def main_app():
             st.session_state.page = "intro"
             st.rerun()
 
-    # 라우팅
-    if st.session_state.page == "write": page_write(sh)
-    elif st.session_state.page == "dashboard": page_dashboard(sh)
-    elif st.session_state.page == "result": page_recommend(sh)
-    elif st.session_state.page == "stats": page_stats(sh)
-    elif st.session_state.page == "happy": page_happy_storage(sh)
+    # --- 라우팅 ---
+    if st.session_state.menu == "일기 작성": page_write(sh)
+    elif st.session_state.menu == "달력 보기": page_calendar(sh)
+    elif st.session_state.menu == "음악/영화 추천": page_recommend(sh)
+    elif st.session_state.menu == "통계 보기": page_stats(sh)
+    elif st.session_state.menu == "행복 저장소": page_happy_storage(sh)
 
 # --- 페이지 함수들 ---
 def page_write(sh):
@@ -419,17 +367,17 @@ def page_write(sh):
     
     if st.button("🔍 감정 분석하고 저장하기", type="primary", use_container_width=True):
         if not txt.strip(): st.warning("내용을 입력해주세요."); return
-        with st.spinner("AI가 일기를 분석하고 있어요... 🤖"):
+        with st.spinner("분석 중..."):
             emo, sc = analyze_diary(txt, model, tokenizer, device, id2label)
             st.session_state.final_emotion = emo
             st.session_state.music_recs = recommend_music(emo)
             st.session_state.movie_recs = recommend_movies(emo)
             today = datetime.now(KST).strftime("%Y-%m-%d")
             add_diary(sh, st.session_state.username, today, emo, txt)
-            st.session_state.page = "result"
+            st.session_state.menu = "음악/영화 추천"
             st.rerun()
 
-def page_dashboard(sh):
+def page_calendar(sh):
     st.markdown("## 📅 감정 달력")
     cols = st.columns(6)
     for i, (k, v) in enumerate(EMOTION_META.items()):
@@ -461,7 +409,7 @@ def page_dashboard(sh):
         with c1:
             if st.button("✏️ 일기 수정하기", use_container_width=True):
                 st.session_state.diary_input = my_diaries[today_str]["text"]
-                st.session_state.page = "write"
+                st.session_state.menu = "일기 작성"
                 st.rerun()
         with c2:
             if st.button("🎵 오늘의 추천 보기", type="primary", use_container_width=True):
@@ -469,15 +417,17 @@ def page_dashboard(sh):
                 st.session_state.final_emotion = emo
                 st.session_state.music_recs = recommend_music(emo)
                 st.session_state.movie_recs = recommend_movies(emo)
-                st.session_state.page = "result"
+                st.session_state.menu = "음악/영화 추천"
                 st.rerun()
     else:
         if st.button("✏️ 오늘의 일기 쓰러 가기", type="primary", use_container_width=True):
             st.session_state.diary_input = ""
-            st.session_state.page = "write"
+            st.session_state.menu = "일기 작성"
             st.rerun()
 
 def page_recommend(sh):
+    st.markdown("## 🎵 음악/영화 추천")
+
     if "final_emotion" not in st.session_state:
         today = datetime.now(KST).strftime("%Y-%m-%d")
         diaries = get_user_diaries(sh, st.session_state.username)
@@ -488,7 +438,7 @@ def page_recommend(sh):
         else:
             st.info("작성된 일기가 없습니다.")
             if st.button("일기 쓰러 가기", type="primary"):
-                st.session_state.page = "write"
+                st.session_state.menu = "일기 작성"
                 st.rerun()
             return
 
@@ -517,18 +467,22 @@ def page_recommend(sh):
                 tc.markdown(f"**{item['title']} ({item['year']})**\n⭐ {item['rating']}\n\n*{item.get('overview','')}*")
 
     st.divider()
-    b1, b2 = st.columns(2)
+    b1, b2, b3 = st.columns(3)
     with b1:
-        if st.button("📊 통계 보러가기", use_container_width=True):
-            st.session_state.page = "stats"
+        if st.button("📅 달력 보기", use_container_width=True):
+            st.session_state.menu = "달력 보기"
             st.rerun()
     with b2:
-        if st.button("📂 행복 저장소 가기", use_container_width=True):
-            st.session_state.page = "happy"
+        if st.button("📊 통계 보기", use_container_width=True):
+            st.session_state.menu = "통계 보기"
+            st.rerun()
+    with b3:
+        if st.button("📂 행복 저장소", use_container_width=True):
+            st.session_state.menu = "행복 저장소"
             st.rerun()
 
 def page_stats(sh):
-    st.markdown("## 📊 나의 감정 통계")
+    st.markdown("## 📊 감정 통계")
     
     if "stats_year" not in st.session_state:
         now = datetime.now(KST)
@@ -537,7 +491,7 @@ def page_stats(sh):
 
     c1, c2, c3 = st.columns([0.2, 0.6, 0.2])
     with c1:
-        if st.button("◀️", use_container_width=True):
+        if st.button("◀️", use_container_width=True, key="prev_stats"):
             if st.session_state.stats_month == 1:
                 st.session_state.stats_year -= 1
                 st.session_state.stats_month = 12
@@ -546,7 +500,7 @@ def page_stats(sh):
     with c2:
         st.markdown(f"<h3 style='text-align: center; margin:0; color: #333;'>{st.session_state.stats_year}년 {st.session_state.stats_month}월</h3>", unsafe_allow_html=True)
     with c3:
-        if st.button("▶️", use_container_width=True):
+        if st.button("▶️", use_container_width=True, key="next_stats"):
             if st.session_state.stats_month == 12:
                 st.session_state.stats_year += 1
                 st.session_state.stats_month = 1
@@ -571,52 +525,83 @@ def page_stats(sh):
     domain = list(EMOTION_META.keys())
     range_ = [m['color'].replace('0.6', '1.0').replace('0.5', '1.0') for m in EMOTION_META.values()] 
     
-    max_val = int(chart_data['count'].max()) if not chart_data.empty else 5
-    y_values = list(range(0, max_val + 2))
+    # ⭐️ 시각화 개선
+    if not month_data:
+        st.info("이 달에는 작성된 일기가 없습니다.")
+    else:
+        most_common_emo = max(set(month_data), key=month_data.count)
+        total_count = len(month_data)
 
-    st.vega_lite_chart(chart_data, {
-        "mark": {"type": "bar", "cornerRadius": 10},
-        "encoding": {
-            "x": {
-                "field": "emotion", "type": "nominal", "sort": domain, 
-                "axis": {"labelAngle": 0, "labelFontSize": 12}, "title": "감정"
-            },
-            "y": {
-                "field": "count", "type": "quantitative", 
-                "axis": {"values": y_values, "format": "d", "titleAngle": 0, "titleAlign": "right", "titleY": -10}, 
-                "scale": {"domainMin": 0}, "title": "횟수"
-            },
-            "color": {"field": "emotion", "scale": {"domain": domain, "range": range_}, "legend": None},
-            "tooltip": [{"field": "emotion"}, {"field": "count"}]
-        }
-    }, use_container_width=True)
+        sc1, sc2 = st.columns(2)
+        sc1.markdown(f"""<div class='stat-card'><div class='stat-value'>{total_count}개</div><div class='stat-label'>총 기록 수</div></div>""", unsafe_allow_html=True)
+        sc2.markdown(f"""<div class='stat-card'><div class='stat-value'>{EMOTION_META[most_common_emo]['emoji']} {most_common_emo}</div><div class='stat-label'>가장 많이 느낀 감정</div></div>""", unsafe_allow_html=True)
+        st.write("")
+        
+        max_val = int(chart_data['count'].max()) if not chart_data.empty else 5
+        y_values = list(range(0, max_val + 2))
+
+        st.vega_lite_chart(chart_data, {
+            "mark": {"type": "bar", "cornerRadius": 10},
+            "encoding": {
+                "x": {
+                    "field": "emotion", "type": "nominal", "sort": domain, 
+                    "axis": {"labelAngle": 0, "labelFontSize": 12}, "title": "감정"
+                },
+                "y": {
+                    "field": "count", "type": "quantitative", 
+                    "axis": {"values": y_values, "format": "d", "titleAngle": 0, "titleAlign": "right", "titleY": -10}, 
+                    "scale": {"domainMin": 0}, "title": "횟수"
+                },
+                "color": {"field": "emotion", "scale": {"domain": domain, "range": range_}, "legend": None},
+                "tooltip": [{"field": "emotion"}, {"field": "count"}]
+            }
+        }, use_container_width=True)
 
     st.divider()
     if st.button("📂 행복 저장소 보러가기", use_container_width=True):
-        st.session_state.page = "happy"
+        st.session_state.menu = "행복 저장소"
         st.rerun()
 
 def page_happy_storage(sh):
     st.markdown("## 📂 행복 저장소")
-    st.markdown("내가 **'기쁨'**을 느꼈던 순간들을 모아보세요.")
+    st.markdown("내가 **'기쁨'**을 느꼈던 순간들만 모아봤어요. 🥰")
     my_diaries = get_user_diaries(sh, st.session_state.username)
     happy_moments = {date: data for date, data in my_diaries.items() if data['emotion'] == '기쁨'}
     
     if not happy_moments:
         st.info("아직 기록된 기쁨의 순간이 없어요.")
     else:
-        for date in sorted(happy_moments.keys(), reverse=True):
-            data = happy_moments[date]
-            st.markdown(f"""<div class="happy-card"><div class="happy-date">{date} {EMOTION_META['기쁨']['emoji']}</div><div class="happy-text">{data['text']}</div></div>""", unsafe_allow_html=True)
+        dates = sorted(happy_moments.keys(), reverse=True)
+        for i in range(0, len(dates), 2):
+            cols = st.columns(2)
+            # 첫 번째 카드
+            date1 = dates[i]
+            data1 = happy_moments[date1]
+            with cols[0]:
+                st.markdown(f"""
+                <div class="happy-card">
+                    <div class="happy-date">{date1} {EMOTION_META['기쁨']['emoji']}</div>
+                    <div class="happy-text">{data1['text']}</div>
+                </div>
+                """, unsafe_allow_html=True)
+            
+            # 두 번째 카드 (존재할 경우)
+            if i + 1 < len(dates):
+                date2 = dates[i+1]
+                data2 = happy_moments[date2]
+                with cols[1]:
+                    st.markdown(f"""
+                    <div class="happy-card">
+                        <div class="happy-date">{date2} {EMOTION_META['기쁨']['emoji']}</div>
+                        <div class="happy-text">{data2['text']}</div>
+                    </div>
+                    """, unsafe_allow_html=True)
 
     st.divider()
     if st.button("📊 통계 보러가기", use_container_width=True):
-        st.session_state.page = "stats"
+        st.session_state.menu = "통계 보기"
         st.rerun()
 
-if st.session_state.logged_in:
-    if st.session_state.page == "intro": intro_page() # 로그인 상태여도 Intro로 가는 경우 대비
-    else: main_app()
-else:
-    if st.session_state.page == "intro": intro_page()
-    else: login_page()
+if st.session_state.logged_in: main_app()
+elif st.session_state.page == "intro": intro_page()
+else: login_page()
