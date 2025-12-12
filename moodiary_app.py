@@ -42,10 +42,11 @@ KST = timezone(timedelta(hours=9))
 
 st.set_page_config(layout="wide", page_title="MOODIARY", page_icon="💖")
 
-# ⭐️ 커스텀 CSS (로고 폰트 크기 조정)
+# ⭐️ 커스텀 CSS (텍스트 애니메이션 추가)
 def apply_custom_css():
     st.markdown("""
         <style>
+        /* 1. 폰트 설정 (Noto Sans KR 통일) */
         @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;700&display=swap');
         
         html, body, [class*="css"] { font-family: 'Noto Sans KR', sans-serif; }
@@ -90,13 +91,12 @@ def apply_custom_css():
         section[data-testid="stSidebar"] .stButton > button {
             background: none; color: #333; text-align: left; padding: 10px 0;
             margin-bottom: 5px; font-weight: 600; box-shadow: none; border-radius: 0;
-            font-size: 1rem; /* 기본 크기 유지 */
         }
         section[data-testid="stSidebar"] .stButton > button:hover {
             color: #6C5CE7; background: none; transform: none;
         }
 
-        /* 6. 행복 저장소 카드 (글씨 강조) */
+        /* 6. 행복 저장소 카드 */
         .happy-card {
             background: linear-gradient(135deg, #fff9c4 0%, #fff176 100%);
             padding: 25px; border-radius: 20px; margin-bottom: 20px;
@@ -110,15 +110,21 @@ def apply_custom_css():
             border: 1px solid rgba(255, 255, 255, 0.8);
         }
         
-        /* 8. ⭐️ 로고 폰트 크기 조정 (한 줄로 나오게) */
-        .single-line-logo {
-            font-size: 4rem !important; /* 이전 5rem에서 4rem으로 조정 */
-            color: #6C5CE7; 
-            margin-bottom: 0; 
-            text-align: center;
+        /* 8. ⭐️ MOODIARY 텍스트 색상 애니메이션 */
+        @keyframes color-shift {
+            0% { color: #6C5CE7; } /* 보라 */
+            33% { color: #FF7675; } /* 분홍 */
+            66% { color: #23a6d5; } /* 파랑 */
+            100% { color: #6C5CE7; }
+        }
+        .animated-title {
+            font-size: 5rem !important;
+            font-weight: 800;
+            animation: color-shift 5s ease-in-out infinite alternate;
         }
 
-        header {visibility: hidden;} footer {visibility: hidden;}
+        header {visibility: hidden;}
+        footer {visibility: hidden;}
         </style>
     """, unsafe_allow_html=True)
 
@@ -291,7 +297,7 @@ def intro_page():
     with c2:
         st.markdown("""
             <div style='text-align: center; padding: 40px; border-radius: 20px;'>
-                <h1 class='single-line-logo'>MOODIARY</h1>
+                <h1 class='animated-title'>MOODIARY</h1>
                 <h3 style='color: #888; font-weight: normal; font-size: 2rem;'>당신의 감정은?</h3>
                 <br>
             </div>
@@ -364,7 +370,7 @@ def main_app():
         st.markdown(f"### 👋 **{st.session_state.username}**님")
         st.write("")
         
-        # ⭐️ [목차 복구] 안정적인 st.button으로 구현
+        # ⭐️ [목차] 안정적인 st.button으로 구현
         if st.button("📝 일기 작성", use_container_width=True, key="sb_write"): st.session_state.page = "write"; st.rerun()
         if st.button("📅 감정 달력", use_container_width=True, key="sb_calendar"): st.session_state.page = "dashboard"; st.rerun()
         if st.button("🎵 음악/영화 추천", use_container_width=True, key="sb_recommend"): st.session_state.page = "result"; st.rerun()
@@ -393,6 +399,7 @@ def page_write(sh):
     if "diary_input" not in st.session_state: st.session_state.diary_input = ""
     txt = st.text_area("오늘 하루는 어땠나요?", value=st.session_state.diary_input, height=300, placeholder="오늘 있었던 일과 감정을 자유롭게 적어주세요...")
     
+    # ⭐️ [버튼 안정화] 명시적 key 부여
     if st.button("🔍 감정 분석하고 저장하기", type="primary", use_container_width=True, key="write_save"):
         if not txt.strip(): st.warning("내용을 입력해주세요."); return
         with st.spinner("분석 중..."):
