@@ -40,9 +40,10 @@ EMOTION_META = {
 
 KST = timezone(timedelta(hours=9))
 
+# ⭐️ [레이아웃 설정] 사이드바 공간 확보
 st.set_page_config(layout="wide", page_title="MOODIARY", page_icon="💖")
 
-# ⭐️ 커스텀 CSS (애니메이션 적용 및 안정화)
+# ⭐️ 커스텀 CSS
 def apply_custom_css():
     st.markdown("""
         <style>
@@ -87,7 +88,7 @@ def apply_custom_css():
             filter: brightness(1.1); color: white;
         }
 
-        /* 5. 사이드바 메뉴 버튼 (안정화) */
+        /* 5. ⭐️ 사이드바 메뉴 버튼 (안정화) */
         section[data-testid="stSidebar"] .stButton > button {
             background: none; color: #333; text-align: left; padding: 10px 0;
             margin-bottom: 5px; font-weight: 600; box-shadow: none; border-radius: 0;
@@ -111,23 +112,22 @@ def apply_custom_css():
             border: 1px solid rgba(255, 255, 255, 0.8);
         }
         
-        /* 8. ⭐️ MOODIARY 텍스트 색상 애니메이션 */
+        /* 8. MOODIARY 텍스트 색상 애니메이션 및 크기 조정 */
         @keyframes color-shift {
-            0% { color: #6C5CE7; } /* 보라 */
-            33% { color: #FF7675; } /* 분홍 */
-            66% { color: #23a6d5; } /* 파랑 */
+            0% { color: #6C5CE7; }
+            33% { color: #FF7675; }
+            66% { color: #23a6d5; }
             100% { color: #6C5CE7; }
         }
         .animated-title {
-            font-size: 3.5rem !important; /* 크기 조정 */
+            font-size: 3.5rem !important; 
             font-weight: 800;
             animation: color-shift 5s ease-in-out infinite alternate;
-            display: inline-block; /* 텍스트 애니메이션을 위해 필요 */
+            display: inline-block; 
             margin-bottom: 0;
         }
 
-        header {visibility: hidden;}
-        footer {visibility: hidden;}
+        header {visibility: hidden;} footer {visibility: hidden;}
         </style>
     """, unsafe_allow_html=True)
 
@@ -318,7 +318,7 @@ def login_page():
     with c1:
         st.markdown("""
             <div style='padding-top: 5rem;'>
-                <h1 class='animated-title'>MOODIARY</h1> 
+                <h1 class='animated-title'>MOODIARY</h1>
                 <p style='font-size: 1.5rem; color:#555;'>오늘의 감정을 기록하고<br>나를 위한 처방을 받아보세요.</p>
             </div>
         """, unsafe_allow_html=True)
@@ -328,7 +328,7 @@ def login_page():
         tab1, tab2 = st.tabs(["🔑 로그인", "📝 회원가입"])
         
         if sh is None:
-            st.warning("⚠️ DB 연결 중...")
+            st.warning("⚠️ DB 연결 중입니다...")
             if st.button("🔄 새로고침"): st.rerun()
             return
 
