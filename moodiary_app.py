@@ -142,7 +142,6 @@ def apply_custom_css():
             margin-bottom: 0;
         }
 
-        header {visibility: hidden;}
         footer {visibility: hidden;}
         </style>
     """, unsafe_allow_html=True)
@@ -653,3 +652,4 @@ def page_happy_storage(sh):
 if st.session_state.logged_in: main_app()
 elif st.session_state.page == "intro": intro_page()
 else: login_page()
+
