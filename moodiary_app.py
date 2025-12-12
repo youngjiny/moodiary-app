@@ -48,6 +48,7 @@ def apply_custom_css():
     is_dark = st.session_state.get("dark_mode", False)
     
     if is_dark:
+        # 야간 모드 색상
         bg_start = "#121212"
         bg_mid = "#2c2c2c"
         bg_end = "#403A4E"
@@ -61,6 +62,7 @@ def apply_custom_css():
         card_text_happy = "#ffffff" 
         stat_card_line = "1px solid #444444" 
     else:
+        # 주간 모드 색상
         bg_start = "#ee7752"
         bg_mid = "#e73c7e"
         bg_end = "#23d5ab"
@@ -109,6 +111,8 @@ def apply_custom_css():
         p, label, .stMarkdown, .stTextarea, .stTextInput, .stCheckbox, [data-testid^="stBlock"] {{ color: {main_text} !important; }}
         section[data-testid="stSidebar"] * {{ color: {main_text} !important; }}
         section[data-testid="stSidebar"] {{ background-color: {sidebar_bg} !important; }}
+        
+        /* 감정 설명 문구 (조마조마해요 등) */
         .stMarkdown h4 {{ color: {secondary_text} !important; }} 
         .stTextInput, .stTextarea {{ color: {secondary_text} !important; }}
 
@@ -122,12 +126,12 @@ def apply_custom_css():
         }}
         .stButton > button:hover {{ transform: translateY(-2px); filter: brightness(1.1); }}
 
-        /* 6. ⭐️ 사이드바 메뉴 (st.radio로 복구) ⭐️ */
+        /* 6. ⭐️ 사이드바 메뉴 (st.radio를 메뉴처럼) ⭐️ */
         section[data-testid="stSidebar"] .stRadio > div[role="radiogroup"] {{
             border: none; padding: 0; gap: 5px;
         }}
         section[data-testid="stSidebar"] .stRadio > div[role="radiogroup"] label {{
-            background: #f8f9fa; border-radius: 8px; padding: 10px 15px;
+            background: {sidebar_bg}; border-radius: 8px; padding: 10px 15px;
             margin-bottom: 5px; transition: background-color 0.1s;
         }}
         section[data-testid="stSidebar"] .stRadio > div[role="radiogroup"] label:hover {{
@@ -146,15 +150,15 @@ def apply_custom_css():
         section[data-testid="stSidebar"] .stRadio > div[role="radiogroup"] label span:first-child {{
             display: none !important;
         }}
-        
+
         /* 7. 행복 저장소 카드 */
         .happy-card {{
-            background: #fff9c4; border-left: 6px solid #FFD700;
+            background: {card_bg}; border-left: 6px solid #FFD700;
             padding: 25px; border-radius: 20px; margin-bottom: 15px;
             box-shadow: 0 4px 10px rgba(0,0,0,0.1);
         }}
         .happy-date {{ color: {main_text}; font-weight: 700; margin-bottom: 12px; }}
-        .happy-text {{ font-size: 1.4em; font-weight: 600; line-height: 1.5; color: {secondary_text}; }}
+        .happy-text {{ font-size: 1.4em; font-weight: 600; line-height: 1.5; color: {card_text_happy}; }}
 
         /* 8. 통계 요약 카드 */
         .stat-card {{
@@ -434,15 +438,26 @@ def main_app():
 
         st.divider()
         
-        # ⭐️ [목차 복구] 안정적인 st.button으로 구현
-        if st.button("📝 일기 작성", use_container_width=True, key="sb_write"): st.session_state.page = "write"; st.rerun()
-        if st.button("📅 감정 달력", use_container_width=True, key="sb_calendar"): st.session_state.page = "dashboard"; st.rerun()
-        if st.button("🎵 음악/영화 추천", use_container_width=True, key="sb_recommend"): st.session_state.page = "result"; st.rerun()
-        if st.button("📊 통계 보기", use_container_width=True, key="sb_stats"): st.session_state.page = "stats"; st.rerun()
-        if st.button("📂 행복 저장소", use_container_width=True, key="sb_happy"): st.session_state.page = "happy"; st.rerun()
+        # ⭐️ [목차 복구] 안정적인 st.radio로 메뉴 구현
+        PAGE_MAP = {
+            "📝 일기 작성": "write",
+            "📅 감정 달력": "dashboard",
+            "🎵 음악/영화 추천": "result",
+            "📊 통계 보기": "stats",
+            "📂 행복 저장소": "happy"
+        }
+        
+        current_page_key = next((k for k, v in PAGE_MAP.items() if v == st.session_state.page), list(PAGE_MAP.keys())[0])
+        idx = list(PAGE_MAP.keys()).index(current_page_key)
+        
+        selected = st.radio("목차", list(PAGE_MAP.keys()), index=idx, key="sidebar_menu_radio")
+        
+        if PAGE_MAP[selected] != st.session_state.page:
+            st.session_state.page = PAGE_MAP[selected]
+            st.rerun()
 
         st.divider()
-        if st.button("🚪 로그아웃", use_container_width=True, key="sb_logout"):
+        if st.button("🚪 로그아웃", use_container_width=True):
             st.session_state.logged_in = False
             st.session_state.page = "intro"
             st.rerun()
