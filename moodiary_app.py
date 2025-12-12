@@ -42,27 +42,25 @@ KST = timezone(timedelta(hours=9))
 
 st.set_page_config(layout="wide", page_title="MOODIARY", page_icon="💖")
 
-# ⭐️ 커스텀 CSS (야간 모드 CSS 조건부 렌더링)
+# ⭐️ 커스텀 CSS (st.radio 메뉴 스타일 및 가시성 확보)
 def apply_custom_css():
     
     is_dark = st.session_state.get("dark_mode", False)
     
     if is_dark:
-        # 야간 모드 색상
         bg_start = "#121212"
         bg_mid = "#2c2c2c"
         bg_end = "#403A4E"
         
         main_bg = "rgba(40, 40, 40, 0.9)"
-        main_text = "#f0f0f0"       # ⭐️ 기본 텍스트 (흰색)
-        secondary_text = "#bbbbbb"  # ⭐️ 감정 설명 등 보조 텍스트 (연한 회색)
+        main_text = "#f0f0f0"       
+        secondary_text = "#bbbbbb"  
         sidebar_bg = "#1e1e1e"
         menu_checked = "#A29BFE"
-        card_bg = "#3a3a3a"         # 어두운 행복 저장소 배경
-        card_text_happy = "#ffffff" # 행복 저장소 텍스트 (흰색)
-        stat_card_line = "1px solid #444444" # 통계 구분선
+        card_bg = "#3a3a3a"         
+        card_text_happy = "#ffffff" 
+        stat_card_line = "1px solid #444444" 
     else:
-        # 주간 모드 색상
         bg_start = "#ee7752"
         bg_mid = "#e73c7e"
         bg_end = "#23d5ab"
@@ -107,14 +105,11 @@ def apply_custom_css():
             max-width: 1000px;
         }}
         
-        /* 4. ⭐️ 텍스트 가시성 확보 */
+        /* 4. 텍스트 가시성 확보 */
         p, label, .stMarkdown, .stTextarea, .stTextInput, .stCheckbox, [data-testid^="stBlock"] {{ color: {main_text} !important; }}
         section[data-testid="stSidebar"] * {{ color: {main_text} !important; }}
         section[data-testid="stSidebar"] {{ background-color: {sidebar_bg} !important; }}
-        
-        /* 감정 설명 문구 (조마조마해요 등) */
         .stMarkdown h4 {{ color: {secondary_text} !important; }} 
-        /* 입력창 힌트 텍스트 가시성 보장 */
         .stTextInput, .stTextarea {{ color: {secondary_text} !important; }}
 
 
@@ -127,33 +122,44 @@ def apply_custom_css():
         }}
         .stButton > button:hover {{ transform: translateY(-2px); filter: brightness(1.1); }}
 
-        /* 6. 사이드바 메뉴 버튼 (안정화) */
-        section[data-testid="stSidebar"] .stButton > button {{
-            color: {main_text}; background: none; font-weight: 600;
+        /* 6. ⭐️ 사이드바 메뉴 (st.radio로 복구) ⭐️ */
+        section[data-testid="stSidebar"] .stRadio > div[role="radiogroup"] {{
+            border: none; padding: 0; gap: 5px;
         }}
-        section[data-testid="stSidebar"] .stButton > button:hover {{
-            color: {menu_checked}; background: none; transform: none;
+        section[data-testid="stSidebar"] .stRadio > div[role="radiogroup"] label {{
+            background: #f8f9fa; border-radius: 8px; padding: 10px 15px;
+            margin-bottom: 5px; transition: background-color 0.1s;
         }}
-
-        /* 7. ⭐️ 행복 저장소 카드 (디자인 개선 및 가시성) */
+        section[data-testid="stSidebar"] .stRadio > div[role="radiogroup"] label:hover {{
+            background: #eee;
+        }}
+        /* 선택된 메뉴 강조 */
+        section[data-testid="stSidebar"] .stRadio > div[role="radiogroup"] label[data-checked='true'] {{
+            background: {menu_checked};
+            color: white !important;
+            font-weight: 700;
+        }}
+        section[data-testid="stSidebar"] .stRadio > div[role="radiogroup"] label[data-checked='true'] p {{
+            color: white !important;
+        }}
+        /* 라디오 버튼 원 숨기기 */
+        section[data-testid="stSidebar"] .stRadio > div[role="radiogroup"] label span:first-child {{
+            display: none !important;
+        }}
+        
+        /* 7. 행복 저장소 카드 */
         .happy-card {{
-            background: {card_bg}; border-left: 6px solid #FFD700;
-            padding: 25px; border-radius: 20px; box-shadow: 0 4px 10px rgba(0,0,0,0.1);
-            margin-bottom: 15px;
-            height: auto;
+            background: #fff9c4; border-left: 6px solid #FFD700;
+            padding: 25px; border-radius: 20px; margin-bottom: 15px;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.1);
         }}
         .happy-date {{ color: {main_text}; font-weight: 700; margin-bottom: 12px; }}
-        .happy-text {{ font-size: 1.4em; font-weight: 600; line-height: 1.5; color: {card_text_happy}; }}
+        .happy-text {{ font-size: 1.4em; font-weight: 600; line-height: 1.5; color: {secondary_text}; }}
 
-        /* 8. ⭐️ 통계 요약 카드 (선/배경 제거 및 가시성) */
+        /* 8. 통계 요약 카드 */
         .stat-card {{
-            background: transparent;
-            box-shadow: none;
-            padding: 10px 0; 
-            border: none; 
-            text-align: center;
+            background: transparent; box-shadow: none; padding: 10px 0; border: none; text-align: center;
         }}
-        /* 통계 요약 카드 간 구분선 (수직선) */
         .stat-card:first-child {{ border-right: {stat_card_line}; }} 
         
         /* 9. MOODIARY 텍스트 색상 애니메이션 */
@@ -627,7 +633,7 @@ def page_stats(sh):
         stat_divider_color = "rgba(128,128,128,0.3)" if not st.session_state.dark_mode else "#444444"
 
         st.markdown(f"""
-            <div style='display:flex; justify-content:space-around; text-align:center; margin-bottom: 20px;'>
+            <div style='display:flex; justify-content:space-around; text-align:center;'>
                 <div style='flex:1; padding: 10px 0; border-right: 1px solid {stat_divider_color};'>
                     <div style='font-size:1.8em; font-weight:700; color:#6C5CE7;'>{total_count}개</div>
                     <div style='font-size:0.9em; color:{stat_label_color};'>총 기록 수</div>
@@ -637,6 +643,7 @@ def page_stats(sh):
                     <div style='font-size:0.9em; color:{stat_label_color};'>가장 많이 느낀 감정</div>
                 </div>
             </div>
+            <br>
         """, unsafe_allow_html=True)
         
         st.vega_lite_chart(chart_data, {
@@ -680,7 +687,7 @@ def page_happy_storage(sh):
     else:
         dates = sorted(happy_moments.keys(), reverse=True)
         for i in range(0, len(dates), 2):
-            cols = st.columns(2, gap="large") 
+            cols = st.columns(2, gap="large") # 겹침 방지 간격 유지
             date1 = dates[i]
             data1 = happy_moments[date1]
             with cols[0]:
