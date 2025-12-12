@@ -42,15 +42,18 @@ KST = timezone(timedelta(hours=9))
 
 st.set_page_config(layout="wide", page_title="MOODIARY", page_icon="💖")
 
-# ⭐️ 커스텀 CSS
+# ⭐️ 커스텀 CSS (Sidebar 안정화 및 폰트 통일)
 def apply_custom_css():
     st.markdown("""
         <style>
-        /* 1. 폰트 설정 (Noto Sans KR 통일) */
+        /* 1. 폰트 설정 (Noto Sans KR로 통일) */
         @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;700&display=swap');
         
         html, body, [class*="css"] { font-family: 'Noto Sans KR', sans-serif; }
-        h1, h2, h3, .stMarkdown h1, .stMarkdown h2, .stMarkdown h3 { font-weight: 700; }
+        h1, h2, h3, .stMarkdown h1, .stMarkdown h2, .stMarkdown h3 { 
+            font-family: 'Noto Sans KR', sans-serif !important; 
+            font-weight: 700;
+        }
 
         /* 2. 배경 애니메이션 */
         @keyframes gradient {
@@ -77,28 +80,55 @@ def apply_custom_css():
         
         /* 4. 버튼 스타일 (메인) */
         .stButton > button {
-            width: 100%; border-radius: 20px; border: none;
+            width: 100%;
+            border-radius: 20px;
+            border: none;
             background: linear-gradient(90deg, #6C5CE7 0%, #a29bfe 100%);
-            color: white; font-weight: 700; padding: 0.6rem 1rem;
-            box-shadow: 0 4px 6px rgba(0,0,0,0.1); transition: all 0.3s ease;
+            color: white;
+            font-weight: 700;
+            padding: 0.6rem 1rem;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            transition: all 0.3s ease;
         }
         .stButton > button:hover {
-            transform: translateY(-2px); box-shadow: 0 6px 12px rgba(0,0,0,0.15);
-            filter: brightness(1.1); color: white;
+            transform: translateY(-2px);
+            box-shadow: 0 6px 12px rgba(0,0,0,0.15);
+            filter: brightness(1.1);
+            color: white;
         }
 
-        /* 5. 행복 저장소 카드 (글씨 강조) */
+        /* 5. ⭐️ [핵심] 사이드바 메뉴 버튼 안정화 */
+        section[data-testid="stSidebar"] .stButton > button {
+            background: none; /* 배경색 제거 */
+            border: none;
+            color: #333;
+            text-align: left;
+            padding: 10px 0;
+            margin-bottom: 5px;
+            font-weight: 600;
+            box-shadow: none;
+            transition: color 0.1s;
+        }
+        section[data-testid="stSidebar"] .stButton > button:hover {
+            color: #6C5CE7; /* 호버 시 색상만 변경 */
+            background: none;
+            transform: none;
+            text-decoration: underline;
+        }
+
+        /* 6. 행복 저장소 카드 (글씨 강조) */
         .happy-card {
             background: linear-gradient(135deg, #fff9c4 0%, #fff176 100%);
-            padding: 25px; border-radius: 20px; margin-bottom: 20px;
-            box-shadow: 0 4px 15px rgba(0,0,0,0.08); border-left: 6px solid #FFD700;
+            padding: 25px;
+            border-radius: 20px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.08);
+            border-left: 6px solid #FFD700;
         }
-        .happy-text { font-size: 1.4em; font-weight: 600; line-height: 1.5; color: #2c3e50; }
-
-        /* 6. 로그인 박스 스타일 */
-        .login-box {
-            background: rgba(255, 255, 255, 0.6); padding: 2rem; border-radius: 20px;
-            border: 1px solid rgba(255, 255, 255, 0.8);
+        .happy-text {
+            font-size: 1.4em; /* ⭐️ 글씨 크기 강조 */
+            font-weight: 600; /* ⭐️ 글씨 굵기 강조 */
+            line-height: 1.5;
+            color: #2c3e50;
         }
 
         header {visibility: hidden;}
@@ -107,7 +137,7 @@ def apply_custom_css():
     """, unsafe_allow_html=True)
 
 # =========================================
-# 🔐 3) 구글 시트 데이터베이스 (안정화 유지)
+# 🔐 3) 구글 시트 데이터베이스
 # =========================================
 @st.cache_resource
 def get_gsheets_client():
@@ -128,9 +158,7 @@ def init_db():
         sh.worksheet("users")
         sh.worksheet("diaries")
         return sh
-    except Exception as e:
-        # ⭐️ 에러 진단 기능 유지
-        st.error(f"❌ DB 연결 실패: 시트 이름/공유 권한 확인 필요. (에러 유형: {type(e).__name__})")
+    except:
         return None 
 
 def get_all_users(sh):
@@ -174,7 +202,7 @@ def add_diary(sh, username, date, emotion, text):
     except: return False
 
 # =========================================
-# 🧠 4) AI & 추천 로직 (생략)
+# 🧠 4) AI & 추천 로직
 # =========================================
 @st.cache_resource
 def load_emotion_model():
@@ -252,12 +280,8 @@ def recommend_movies(emotion):
             "page": random.randint(1, 5), "vote_count.gte": 500, "primary_release_date.gte": "2000-01-01"
         }, timeout=5)
         results = r.json().get("results", [])
-        
-        # ⭐️ 평점 7.5 이상 최종 필터링 유지
-        filtered_results = [m for m in results if m.get("vote_average", 0.0) >= 7.5 and m.get("vote_count", 0) >= 500]
-        
-        if not filtered_results: return [{"text": "조건에 맞는 영화가 없습니다.", "poster": None}]
-        picks = random.sample(filtered_results, min(3, len(filtered_results)))
+        if not results: return [{"text": "영화 없음", "poster": None}]
+        picks = random.sample(results, min(3, len(results)))
         return [{"title": m["title"], "year": (m.get("release_date") or "")[:4], "rating": m["vote_average"], "overview": m["overview"], "poster": f"https://image.tmdb.org/t/p/w500{m['poster_path']}" if m.get("poster_path") else None} for m in picks]
     except Exception as e: return [{"text": f"오류: {e}", "poster": None}]
 
@@ -277,8 +301,8 @@ def intro_page():
     with c2:
         st.markdown("""
             <div style='text-align: center; padding: 40px; border-radius: 20px;'>
-                <h1 style='font-size: 5rem; color: #6C5CE7; margin-bottom: 0;'>MOODIARY</h1>
-                <h3 style='color: #888; font-weight: normal;'>당신의 감정은?</h3>
+                <h1 class='intro-title'>MOODIARY</h1>
+                <h3 class='intro-subtitle'>당신의 감정은?</h3>
                 <br>
             </div>
         """, unsafe_allow_html=True)
@@ -345,30 +369,18 @@ def main_app():
         if st.button("🔄 새로고침"): st.rerun()
         return
 
-    # --- 사이드바 (목차 안정화 버전) ---
+    # --- 사이드바 ---
     with st.sidebar:
         st.markdown(f"### 👋 **{st.session_state.username}**님")
         st.write("")
         
-        # ⭐️ st.radio를 사용한 안정적인 메뉴 구현
-        PAGE_MAP = {
-            "📝 일기 작성": "write",
-            "📅 감정 달력": "dashboard",
-            "🎵 음악/영화 추천": "result",
-            "📊 통계 보기": "stats",
-            "📂 행복 저장소": "happy"
-        }
+        # ⭐️ [복구] 사이드바 메뉴 (목차)
+        if st.button("📝 일기 작성", use_container_width=True, key="sb_write"): st.session_state.page = "write"; st.rerun()
+        if st.button("📅 달력 보기", use_container_width=True, key="sb_calendar"): st.session_state.page = "dashboard"; st.rerun()
+        if st.button("🎵 음악/영화 추천", use_container_width=True, key="sb_recommend"): st.session_state.page = "result"; st.rerun()
+        if st.button("📊 통계 보기", use_container_width=True, key="sb_stats"): st.session_state.page = "stats"; st.rerun()
+        if st.button("📂 행복 저장소", use_container_width=True, key="sb_happy"): st.session_state.page = "happy"; st.rerun()
         
-        current_page_key = next((k for k, v in PAGE_MAP.items() if v == st.session_state.page), list(PAGE_MAP.keys())[0])
-        idx = list(PAGE_MAP.keys()).index(current_page_key)
-        
-        # st.radio를 사용 (가장 안정적인 메뉴 구현)
-        selected = st.radio("목차", list(PAGE_MAP.keys()), index=idx, key="sidebar_menu_radio")
-        
-        if PAGE_MAP[selected] != st.session_state.page:
-            st.session_state.page = PAGE_MAP[selected]
-            st.rerun()
-
         st.divider()
         if st.button("🚪 로그아웃", use_container_width=True):
             st.session_state.logged_in = False
@@ -545,9 +557,10 @@ def page_stats(sh):
     domain = list(EMOTION_META.keys())
     range_ = [m['color'].replace('0.6', '1.0').replace('0.5', '1.0') for m in EMOTION_META.values()] 
     
+    max_val = int(chart_data['count'].max()) if not chart_data.empty else 5
+    y_values = list(range(0, max_val + 2))
+
     if month_data:
-        max_val = int(chart_data['count'].max()) if not chart_data.empty else 5
-        y_values = list(range(0, max_val + 2))
         most_common_emo = max(set(month_data), key=month_data.count)
         total_count = len(month_data)
 
