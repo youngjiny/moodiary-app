@@ -42,15 +42,14 @@ KST = timezone(timedelta(hours=9))
 
 st.set_page_config(layout="wide", page_title="MOODIARY", page_icon="💖")
 
-# ⭐️ 커스텀 CSS (Sidebar 폰트 크기 조정)
+# ⭐️ 커스텀 CSS (로고 폰트 크기 조정)
 def apply_custom_css():
     st.markdown("""
         <style>
-        /* 1. 폰트 설정 (Noto Sans KR 통일) */
         @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;700&display=swap');
         
         html, body, [class*="css"] { font-family: 'Noto Sans KR', sans-serif; }
-        h1, h2, h3, .stMarkdown h1, .stMarkdown h2, .stMarkdown h3 { font-weight:700; }
+        h1, h2, h3, .stMarkdown h1, .stMarkdown h2, .stMarkdown h3 { font-weight: 700; }
 
         /* 2. 배경 애니메이션 */
         @keyframes gradient {
@@ -75,7 +74,7 @@ def apply_custom_css():
             max-width: 1000px;
         }
         
-        /* 4. 버튼 스타일 (메인) */
+        /* 4. 버튼 스타일 */
         .stButton > button {
             width: 100%; border-radius: 20px; border: none;
             background: linear-gradient(90deg, #6C5CE7 0%, #a29bfe 100%);
@@ -87,12 +86,11 @@ def apply_custom_css():
             filter: brightness(1.1); color: white;
         }
 
-        /* 5. ⭐️ 사이드바 메뉴 버튼 (안정화 + 폰트 크기 조정) */
+        /* 5. 사이드바 메뉴 버튼 (안정화) */
         section[data-testid="stSidebar"] .stButton > button {
             background: none; color: #333; text-align: left; padding: 10px 0;
             margin-bottom: 5px; font-weight: 600; box-shadow: none; border-radius: 0;
-            font-size: 0.95rem; /* ⭐️ 폰트 크기 줄임 */
-            line-height: 1.1; /* 한 줄에 표시되도록 간격 조정 */
+            font-size: 1rem; /* 기본 크기 유지 */
         }
         section[data-testid="stSidebar"] .stButton > button:hover {
             color: #6C5CE7; background: none; transform: none;
@@ -110,6 +108,14 @@ def apply_custom_css():
         .login-box {
             background: rgba(255, 255, 255, 0.6); padding: 2rem; border-radius: 20px;
             border: 1px solid rgba(255, 255, 255, 0.8);
+        }
+        
+        /* 8. ⭐️ 로고 폰트 크기 조정 (한 줄로 나오게) */
+        .single-line-logo {
+            font-size: 4rem !important; /* 이전 5rem에서 4rem으로 조정 */
+            color: #6C5CE7; 
+            margin-bottom: 0; 
+            text-align: center;
         }
 
         header {visibility: hidden;} footer {visibility: hidden;}
@@ -285,8 +291,8 @@ def intro_page():
     with c2:
         st.markdown("""
             <div style='text-align: center; padding: 40px; border-radius: 20px;'>
-                <h1 style='font-size: 5rem; color: #6C5CE7; margin-bottom: 0;'>MOODIARY</h1>
-                <h3 style='color: #888; font-weight: normal;'>당신의 감정은?</h3>
+                <h1 class='single-line-logo'>MOODIARY</h1>
+                <h3 style='color: #888; font-weight: normal; font-size: 2rem;'>당신의 감정은?</h3>
                 <br>
             </div>
         """, unsafe_allow_html=True)
@@ -313,7 +319,7 @@ def login_page():
         tab1, tab2 = st.tabs(["🔑 로그인", "📝 회원가입"])
         
         if sh is None:
-            st.warning("⚠️ DB 연결 중입니다...")
+            st.warning("⚠️ DB 연결 중...")
             if st.button("🔄 새로고침"): st.rerun()
             return
 
@@ -621,5 +627,3 @@ def page_happy_storage(sh):
 if st.session_state.logged_in: main_app()
 elif st.session_state.page == "intro": intro_page()
 else: login_page()
-
-
