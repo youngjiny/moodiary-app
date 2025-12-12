@@ -175,7 +175,7 @@ def apply_custom_css():
         }}
         .animated-title {{ font-size: 3.5rem !important; font-weight: 800; animation: color-shift 5s ease-in-out infinite alternate; }}
 
-        header {{visibility: hidden;}} footer {{visibility: hidden;}}
+        footer {{visibility: hidden;}}
         </style>
     """
     st.markdown(css, unsafe_allow_html=True)
@@ -450,6 +450,7 @@ def main_app():
         current_page_key = next((k for k, v in PAGE_MAP.items() if v == st.session_state.page), list(PAGE_MAP.keys())[0])
         idx = list(PAGE_MAP.keys()).index(current_page_key)
         
+        # st.radio를 사용 (안정적인 메뉴 구현)
         selected = st.radio("목차", list(PAGE_MAP.keys()), index=idx, key="sidebar_menu_radio")
         
         if PAGE_MAP[selected] != st.session_state.page:
