@@ -42,10 +42,11 @@ KST = timezone(timedelta(hours=9))
 
 st.set_page_config(layout="wide", page_title="MOODIARY", page_icon="💖")
 
-# ⭐️ 커스텀 CSS
+# ⭐️ 커스텀 CSS (Sidebar 안정화 및 폰트 통일)
 def apply_custom_css():
     st.markdown("""
         <style>
+        /* 1. 폰트 설정 (Noto Sans KR 통일) */
         @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;700&display=swap');
         
         html, body, [class*="css"] { font-family: 'Noto Sans KR', sans-serif; }
@@ -74,7 +75,7 @@ def apply_custom_css():
             max-width: 1000px;
         }
         
-        /* 4. 버튼 스타일 */
+        /* 4. 버튼 스타일 (메인) */
         .stButton > button {
             width: 100%; border-radius: 20px; border: none;
             background: linear-gradient(90deg, #6C5CE7 0%, #a29bfe 100%);
@@ -109,7 +110,8 @@ def apply_custom_css():
             border: 1px solid rgba(255, 255, 255, 0.8);
         }
 
-        header {visibility: hidden;} footer {visibility: hidden;}
+        header {visibility: hidden;}
+        footer {visibility: hidden;}
         </style>
     """, unsafe_allow_html=True)
 
@@ -136,7 +138,6 @@ def init_db():
         sh.worksheet("diaries")
         return sh
     except Exception as e:
-        # ⭐️ 에러 진단 기능 유지
         st.error(f"❌ DB 연결 실패: 시트 이름/공유 권한 확인 필요. (에러 유형: {type(e).__name__})")
         return None 
 
@@ -318,7 +319,7 @@ def login_page():
         with tab1:
             lid = st.text_input("아이디", key="lid")
             lpw = st.text_input("비밀번호", type="password", key="lpw")
-            if st.button("로그인", use_container_width=True):
+            if st.button("로그인", use_container_width=True, key="login_btn"):
                 users = get_all_users(sh)
                 if str(lid) in users and str(users[str(lid)]) == str(lpw):
                     st.session_state.logged_in = True
@@ -334,7 +335,7 @@ def login_page():
             with tab2:
                 nid = st.text_input("새 아이디", key="nid")
                 npw = st.text_input("새 비밀번호 (4자리)", type="password", key="npw", max_chars=4)
-                if st.button("가입하기", use_container_width=True):
+                if st.button("가입하기", use_container_width=True, key="signup_btn"):
                     users = get_all_users(sh)
                     if str(nid) in users: st.error("이미 존재함")
                     elif len(nid)<1 or len(npw)!=4: st.error("형식 확인 (비번 4자리)")
@@ -356,7 +357,7 @@ def main_app():
         st.markdown(f"### 👋 **{st.session_state.username}**님")
         st.write("")
         
-        # ⭐️ [목차 복구] 안정적인 st.radio 메뉴 구현
+        # ⭐️ [목차 복구] 안정적인 st.button으로 구현 (각 버튼이 명시적으로 페이지 상태를 변경)
         if st.button("📝 일기 작성", use_container_width=True, key="sb_write"): st.session_state.page = "write"; st.rerun()
         if st.button("📅 감정 달력", use_container_width=True, key="sb_calendar"): st.session_state.page = "dashboard"; st.rerun()
         if st.button("🎵 음악/영화 추천", use_container_width=True, key="sb_recommend"): st.session_state.page = "result"; st.rerun()
@@ -364,7 +365,7 @@ def main_app():
         if st.button("📂 행복 저장소", use_container_width=True, key="sb_happy"): st.session_state.page = "happy"; st.rerun()
 
         st.divider()
-        if st.button("🚪 로그아웃", use_container_width=True):
+        if st.button("🚪 로그아웃", use_container_width=True, key="sb_logout"):
             st.session_state.logged_in = False
             st.session_state.page = "intro"
             st.rerun()
@@ -385,7 +386,6 @@ def page_write(sh):
     if "diary_input" not in st.session_state: st.session_state.diary_input = ""
     txt = st.text_area("오늘 하루는 어땠나요?", value=st.session_state.diary_input, height=300, placeholder="오늘 있었던 일과 감정을 자유롭게 적어주세요...")
     
-    # ⭐️ [버튼 안정화] 명시적 key 부여
     if st.button("🔍 감정 분석하고 저장하기", type="primary", use_container_width=True, key="write_save"):
         if not txt.strip(): st.warning("내용을 입력해주세요."); return
         with st.spinner("분석 중..."):
@@ -573,13 +573,9 @@ def page_stats(sh):
     st.divider()
     b1, b2 = st.columns(2)
     with b1:
-        if st.button("📅 달력 보기", use_container_width=True, key="stats_cal"):
-            st.session_state.page = "dashboard"
-            st.rerun()
+        if st.button("📅 달력 보기", use_container_width=True, key="stats_cal"): st.session_state.page = "dashboard"; st.rerun()
     with b2:
-        if st.button("📂 행복 저장소 보러가기", use_container_width=True, key="stats_happy"):
-            st.session_state.page = "happy"
-            st.rerun()
+        if st.button("📂 행복 저장소 보러가기", use_container_width=True, key="stats_happy"): st.session_state.page = "happy"; st.rerun()
 
 def page_happy_storage(sh):
     st.markdown("## 📂 행복 저장소")
@@ -617,13 +613,9 @@ def page_happy_storage(sh):
     st.divider()
     b1, b2 = st.columns(2)
     with b1:
-        if st.button("📅 달력 보기", use_container_width=True, key="happy_cal"):
-            st.session_state.page = "dashboard"
-            st.rerun()
+        if st.button("📅 달력 보기", use_container_width=True, key="happy_cal"): st.session_state.page = "dashboard"; st.rerun()
     with b2:
-        if st.button("📊 통계 보러가기", use_container_width=True, key="happy_stats"):
-            st.session_state.page = "stats"
-            st.rerun()
+        if st.button("📊 통계 보러가기", use_container_width=True, key="happy_stats"): st.session_state.page = "stats"; st.rerun()
 
 if st.session_state.logged_in: main_app()
 elif st.session_state.page == "intro": intro_page()
