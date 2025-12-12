@@ -49,30 +49,31 @@ def apply_custom_css():
     
     # 테마 색상 정의 (주간/야간)
     if is_dark:
-        bg_start = "#232526"
-        bg_mid = "#414345"
-        bg_end = "#232526"
-        main_bg = "rgba(0, 0, 0, 0.8)"
-        main_text = "#f0f0f0"
+        # ⭐️ [야간 모드 배경] 검정-회색-어두운 보라 계열로 변경
+        bg_start = "#121212" # 진한 검정
+        bg_mid = "#2c2c2c"   # 회색
+        bg_end = "#403A4E"   # 어두운 보라
+        
+        main_bg = "rgba(40, 40, 40, 0.9)" # 메인 컨테이너 어둡게
+        main_text = "#f0f0f0" # ⭐️ 텍스트 색상 밝게
         sidebar_bg = "#1e1e1e"
-        menu_bg = "#2c2c2c"
-        menu_checked = "#5a4f78"
+        menu_checked = "#A29BFE" # 밝은 보라
     else:
         bg_start = "#ee7752"
         bg_mid = "#e73c7e"
         bg_end = "#23d5ab"
+        
         main_bg = "rgba(255, 255, 255, 0.85)"
         main_text = "#333333"
         sidebar_bg = "#f8f9fa"
-        menu_bg = "#ffffff"
         menu_checked = "#6C5CE7"
 
     css = f"""
         <style>
-        /* 1. 폰트 설정 */
+        /* 1. 폰트 설정 (Noto Sans KR 통일) */
         @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;700&display=swap');
         
-        html, body, [class*="css"] {{ color: {main_text}; font-family: 'Noto Sans KR', sans-serif; }}
+        html, body, [class*="css"] {{ font-family: 'Noto Sans KR', sans-serif; }}
         h1, h2, h3, .stMarkdown h1, .stMarkdown h2, .stMarkdown h3 {{ color: {main_text}; font-weight: 700; }}
 
         /* 2. 배경 애니메이션 */
@@ -82,7 +83,7 @@ def apply_custom_css():
             100% {{background-position: 0% 50%;}}
         }}
         .stApp {{
-            background: linear-gradient(-45deg, {bg_start}, {bg_mid}, #23a6d5, {bg_end});
+            background: linear-gradient(-45deg, {bg_start}, {bg_mid}, {bg_end});
             background-size: 400% 400%;
             animation: gradient 15s ease infinite;
         }}
@@ -98,30 +99,34 @@ def apply_custom_css():
             max-width: 1000px;
         }}
         
-        /* 4. 버튼 스타일 */
+        /* 4. ⭐️ 텍스트 가시성 확보 (모든 기본 텍스트) */
+        p, label, .stMarkdown, .stTextarea, .stTextInput, .stCheckbox, [data-testid^="stBlock"] {{ color: {main_text} !important; }}
+        section[data-testid="stSidebar"] * {{ color: {main_text} !important; }}
+        section[data-testid="stSidebar"] {{ background-color: {sidebar_bg} !important; }}
+
+        /* 5. 버튼 스타일 */
         .stButton > button {{
             width: 100%; border-radius: 20px; border: none;
             background: linear-gradient(90deg, #6C5CE7 0%, #a29bfe 100%);
             color: white; font-weight: 700; padding: 0.6rem 1rem;
-            box-shadow: 0 4px 6px rgba(0,0,0,0.1); transition: all 0.3s ease;
         }}
-        .stButton > button:hover {{
-            transform: translateY(-2px); box-shadow: 0 6px 12px rgba(0,0,0,0.15);
-            filter: brightness(1.1); color: white;
-        }}
+        .stButton > button:hover {{ transform: translateY(-2px); filter: brightness(1.1); }}
 
-        /* 5. 사이드바 전체 배경 및 텍스트 색상 */
-        section[data-testid="stSidebar"] {{
-            background-color: {sidebar_bg} !important;
-        }}
+        /* 6. 사이드바 메뉴 버튼 (안정화) */
         section[data-testid="stSidebar"] .stButton > button {{
-            color: {main_text}; background: none; font-size: 1rem;
+            color: {main_text}; background: none; font-weight: 600;
         }}
         section[data-testid="stSidebar"] .stButton > button:hover {{
-            color: {menu_checked};
+            color: {menu_checked}; background: none; transform: none;
         }}
 
-        /* 6. MOODIARY 텍스트 색상 애니메이션 */
+        /* 7. 행복 저장소 카드 */
+        .happy-card {{
+            background: #fff9c4; border-left: 6px solid #FFD700;
+        }}
+        .happy-text {{ color: {main_text}; }}
+
+        /* 8. MOODIARY 텍스트 색상 애니메이션 및 크기 조정 */
         @keyframes color-shift {{
             0% {{ color: #6C5CE7; }}
             33% {{ color: #FF7675; }}
@@ -131,17 +136,8 @@ def apply_custom_css():
         .animated-title {{
             font-size: 3.5rem !important; font-weight: 800;
             animation: color-shift 5s ease-in-out infinite alternate;
-        }}
-        
-        /* 7. 행복 저장소 카드 */
-        .happy-card {{
-            background: #fff9c4; border-left: 6px solid #FFD700;
-        }}
-        .happy-text {{ color: {main_text}; }}
-
-        /* 8. 로그인 박스 스타일 */
-        .login-box {{
-            background: rgba(255, 255, 255, 0.6); padding: 2rem; border-radius: 20px;
+            display: inline-block; 
+            margin-bottom: 0;
         }}
 
         header {{visibility: hidden;}} footer {{visibility: hidden;}}
@@ -216,7 +212,7 @@ def add_diary(sh, username, date, emotion, text):
     except: return False
 
 # =========================================
-# 🧠 4) AI & 추천 로직
+# 🧠 4) AI & 추천 로직 (생략)
 # =========================================
 @st.cache_resource
 def load_emotion_model():
@@ -309,7 +305,7 @@ apply_custom_css()
 
 if "logged_in" not in st.session_state: st.session_state.logged_in = False
 if "page" not in st.session_state: st.session_state.page = "intro" 
-if "dark_mode" not in st.session_state: st.session_state.dark_mode = False # ⭐️ 야간 모드 상태 초기화
+if "dark_mode" not in st.session_state: st.session_state.dark_mode = False
 
 # 0. 표지 (Intro) 페이지
 def intro_page():
@@ -335,7 +331,6 @@ def login_page():
     c1, c2 = st.columns([0.6, 0.4])
 
     with c1:
-        # ⭐️ [애니메이션 적용] 로그인 페이지 MOODIARY 로고
         st.markdown("""
             <div style='padding-top: 5rem;'>
                 <h1 class='animated-title'>MOODIARY</h1>
@@ -408,7 +403,7 @@ def main_app():
 
         st.divider()
         
-        # ⭐️ [목차] 안정적인 st.button으로 구현
+        # ⭐️ [목차 복구] 안정적인 st.button으로 구현
         if st.button("📝 일기 작성", use_container_width=True, key="sb_write"): st.session_state.page = "write"; st.rerun()
         if st.button("📅 감정 달력", use_container_width=True, key="sb_calendar"): st.session_state.page = "dashboard"; st.rerun()
         if st.button("🎵 음악/영화 추천", use_container_width=True, key="sb_recommend"): st.session_state.page = "result"; st.rerun()
