@@ -42,7 +42,7 @@ KST = timezone(timedelta(hours=9))
 
 st.set_page_config(layout="wide", page_title="MOODIARY", page_icon="💖")
 
-# ⭐️ 커스텀 CSS (텍스트 애니메이션 추가)
+# ⭐️ 커스텀 CSS (애니메이션 적용 및 안정화)
 def apply_custom_css():
     st.markdown("""
         <style>
@@ -91,6 +91,7 @@ def apply_custom_css():
         section[data-testid="stSidebar"] .stButton > button {
             background: none; color: #333; text-align: left; padding: 10px 0;
             margin-bottom: 5px; font-weight: 600; box-shadow: none; border-radius: 0;
+            font-size: 1rem;
         }
         section[data-testid="stSidebar"] .stButton > button:hover {
             color: #6C5CE7; background: none; transform: none;
@@ -118,9 +119,11 @@ def apply_custom_css():
             100% { color: #6C5CE7; }
         }
         .animated-title {
-            font-size: 4rem !important;
+            font-size: 3.5rem !important; /* 크기 조정 */
             font-weight: 800;
             animation: color-shift 5s ease-in-out infinite alternate;
+            display: inline-block; /* 텍스트 애니메이션을 위해 필요 */
+            margin-bottom: 0;
         }
 
         header {visibility: hidden;}
@@ -315,7 +318,7 @@ def login_page():
     with c1:
         st.markdown("""
             <div style='padding-top: 5rem;'>
-                <h1 style='font-size: 4rem; color:#333;'>MOODIARY</h1>
+                <h1 class='animated-title'>MOODIARY</h1> 
                 <p style='font-size: 1.5rem; color:#555;'>오늘의 감정을 기록하고<br>나를 위한 처방을 받아보세요.</p>
             </div>
         """, unsafe_allow_html=True)
@@ -370,7 +373,7 @@ def main_app():
         st.markdown(f"### 👋 **{st.session_state.username}**님")
         st.write("")
         
-        # ⭐️ [목차] 안정적인 st.button으로 구현
+        # ⭐️ [목차 복구] 안정적인 st.button으로 구현
         if st.button("📝 일기 작성", use_container_width=True, key="sb_write"): st.session_state.page = "write"; st.rerun()
         if st.button("📅 감정 달력", use_container_width=True, key="sb_calendar"): st.session_state.page = "dashboard"; st.rerun()
         if st.button("🎵 음악/영화 추천", use_container_width=True, key="sb_recommend"): st.session_state.page = "result"; st.rerun()
@@ -399,7 +402,6 @@ def page_write(sh):
     if "diary_input" not in st.session_state: st.session_state.diary_input = ""
     txt = st.text_area("오늘 하루는 어땠나요?", value=st.session_state.diary_input, height=300, placeholder="오늘 있었던 일과 감정을 자유롭게 적어주세요...")
     
-    # ⭐️ [버튼 안정화] 명시적 key 부여
     if st.button("🔍 감정 분석하고 저장하기", type="primary", use_container_width=True, key="write_save"):
         if not txt.strip(): st.warning("내용을 입력해주세요."); return
         with st.spinner("분석 중..."):
@@ -634,4 +636,3 @@ def page_happy_storage(sh):
 if st.session_state.logged_in: main_app()
 elif st.session_state.page == "intro": intro_page()
 else: login_page()
-
