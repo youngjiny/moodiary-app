@@ -118,7 +118,7 @@ def apply_custom_css():
             100% { color: #6C5CE7; }
         }
         .animated-title {
-            font-size: 5rem !important;
+            font-size: 4rem !important;
             font-weight: 800;
             animation: color-shift 5s ease-in-out infinite alternate;
         }
@@ -634,3 +634,4 @@ def page_happy_storage(sh):
 if st.session_state.logged_in: main_app()
 elif st.session_state.page == "intro": intro_page()
 else: login_page()
+
