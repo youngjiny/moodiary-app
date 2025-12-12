@@ -42,46 +42,38 @@ KST = timezone(timedelta(hours=9))
 
 st.set_page_config(layout="wide", page_title="MOODIARY", page_icon="💖")
 
-# ⭐️ 커스텀 CSS (st.radio를 메뉴처럼 보이도록 스타일링)
+# ⭐️ 커스텀 CSS (야간 모드 CSS 조건부 렌더링)
 def apply_custom_css():
     
-    # ⭐️ 야간 모드 상태 확인
     is_dark = st.session_state.get("dark_mode", False)
     
-    # 테마 색상 정의
-    bg_start = "#ee7752"
-    bg_mid = "#e73c7e"
-    bg_end = "#23d5ab"
-    
-    main_bg = "rgba(255, 255, 255, 0.85)"
-    main_text = "#333333"
-    sidebar_bg = "#ffffff"
-    sidebar_menu_bg = "#f8f9fa"
-    sidebar_menu_checked = "#6C5CE7"
-    card_bg = "#fff9c4"
-    card_text = "#2c3e50"
-    
+    # 테마 색상 정의 (주간/야간)
     if is_dark:
-        bg_start = "#232526" # 어두운 배경 그라데이션
+        bg_start = "#232526"
         bg_mid = "#414345"
         bg_end = "#232526"
-        
-        main_bg = "rgba(0, 0, 0, 0.75)"
+        main_bg = "rgba(0, 0, 0, 0.8)"
         main_text = "#f0f0f0"
         sidebar_bg = "#1e1e1e"
-        sidebar_menu_bg = "#2c2c2c"
-        sidebar_menu_checked = "#5a4f78" # 다크모드에 어울리는 보라색
-        card_bg = "#4a4a4a" # 어두운 행복 저장소 배경
-        card_text = "#ffffff" # 흰색 텍스트
-    
-    
+        menu_bg = "#2c2c2c"
+        menu_checked = "#5a4f78"
+    else:
+        bg_start = "#ee7752"
+        bg_mid = "#e73c7e"
+        bg_end = "#23d5ab"
+        main_bg = "rgba(255, 255, 255, 0.85)"
+        main_text = "#333333"
+        sidebar_bg = "#f8f9fa"
+        menu_bg = "#ffffff"
+        menu_checked = "#6C5CE7"
+
     css = f"""
         <style>
-        /* 1. 폰트 설정 (Noto Sans KR 통일) */
+        /* 1. 폰트 설정 */
         @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;700&display=swap');
         
-        html, body, [class*="css"] {{ font-family: 'Noto Sans KR', sans-serif; }}
-        h1, h2, h3, .stMarkdown h1, .stMarkdown h2, .stMarkdown h3 {{ font-weight: 700; color: {main_text}; }}
+        html, body, [class*="css"] {{ color: {main_text}; font-family: 'Noto Sans KR', sans-serif; }}
+        h1, h2, h3, .stMarkdown h1, .stMarkdown h2, .stMarkdown h3 {{ color: {main_text}; font-weight: 700; }}
 
         /* 2. 배경 애니메이션 */
         @keyframes gradient {{
@@ -94,13 +86,7 @@ def apply_custom_css():
             background-size: 400% 400%;
             animation: gradient 15s ease infinite;
         }}
-        
-        /* 텍스트 색상 전역 설정 */
-        p, label, .stMarkdown, .stTextarea, .stTextInput {{ color: {main_text} !important; }}
-        /* 섹션 헤더의 텍스트 색상 설정 */
-        section[data-testid="stSidebar"] * {{ color: {main_text} !important; }}
-        section[data-testid="stSidebar"] {{ background-color: {sidebar_bg} !important; }}
-        
+
         /* 3. 메인 컨테이너 (글래스모피즘) */
         .block-container {{
             background: {main_bg};
@@ -112,7 +98,7 @@ def apply_custom_css():
             max-width: 1000px;
         }}
         
-        /* 4. 버튼 스타일 (메인) */
+        /* 4. 버튼 스타일 */
         .stButton > button {{
             width: 100%; border-radius: 20px; border: none;
             background: linear-gradient(90deg, #6C5CE7 0%, #a29bfe 100%);
@@ -124,62 +110,18 @@ def apply_custom_css():
             filter: brightness(1.1); color: white;
         }}
 
-        /* 5. ⭐️ 사이드바 메뉴 (st.radio를 메뉴처럼) ⭐️ */
-        section[data-testid="stSidebar"] .stRadio > div[role="radiogroup"] {{
-            border: none; padding: 0; gap: 5px;
+        /* 5. 사이드바 전체 배경 및 텍스트 색상 */
+        section[data-testid="stSidebar"] {{
+            background-color: {sidebar_bg} !important;
         }}
-        section[data-testid="stSidebar"] .stRadio > div[role="radiogroup"] label {{
-            background: {sidebar_menu_bg}; border-radius: 8px; padding: 10px 15px;
-            margin-bottom: 5px; transition: background-color 0.1s;
+        section[data-testid="stSidebar"] .stButton > button {{
+            color: {main_text}; background: none; font-size: 1rem;
         }}
-        section[data-testid="stSidebar"] .stRadio > div[role="radiogroup"] label:hover {{
-            background: #eee;
-        }}
-        /* 선택된 메뉴 강조 */
-        section[data-testid="stSidebar"] .stRadio > div[role="radiogroup"] label[data-checked='true'] {{
-            background: {sidebar_menu_checked};
-            color: white !important;
-            font-weight: 700;
-        }}
-        section[data-testid="stSidebar"] .stRadio > div[role="radiogroup"] label[data-checked='true'] p {{
-            color: white !important;
-        }}
-        /* 라디오 버튼 원 숨기기 */
-        section[data-testid="stSidebar"] .stRadio > div[role="radiogroup"] label span:first-child {{
-            display: none !important;
+        section[data-testid="stSidebar"] .stButton > button:hover {{
+            color: {menu_checked};
         }}
 
-
-        /* 6. ⭐️ 행복 저장소 카드 개선 ⭐️ */
-        .happy-card {{
-            background: {card_bg};
-            padding: 20px; border-radius: 15px; margin-bottom: 20px;
-            box-shadow: 0 4px 10px rgba(0,0,0,0.1);
-            border-left: 6px solid #FFD700;
-            transition: transform 0.2s;
-        }}
-        .happy-card:hover {{
-            transform: translateY(-3px);
-            box-shadow: 0 8px 15px rgba(0,0,0,0.15);
-        }}
-        .happy-date {{ 
-            font-size: 1.1em; font-weight: 700; 
-            color: {main_text}; 
-            border-bottom: 1px solid rgba(0,0,0,0.1);
-            padding-bottom: 5px; margin-bottom: 10px;
-        }}
-        .happy-text {{ 
-            font-size: 0.95em; line-height: 1.6; 
-            color: {card_text}; 
-        }}
-
-        /* 7. 로그인 박스 스타일 */
-        .login-box {{
-            background: rgba(255, 255, 255, 0.6); padding: 2rem; border-radius: 20px;
-            border: 1px solid rgba(255, 255, 255, 0.8);
-        }}
-        
-        /* 8. MOODIARY 텍스트 색상 애니메이션 및 크기 조정 */
+        /* 6. MOODIARY 텍스트 색상 애니메이션 */
         @keyframes color-shift {{
             0% {{ color: #6C5CE7; }}
             33% {{ color: #FF7675; }}
@@ -187,15 +129,22 @@ def apply_custom_css():
             100% {{ color: #6C5CE7; }}
         }}
         .animated-title {{
-            font-size: 3.5rem !important; 
-            font-weight: 800;
+            font-size: 3.5rem !important; font-weight: 800;
             animation: color-shift 5s ease-in-out infinite alternate;
-            display: inline-block; 
-            margin-bottom: 0;
+        }}
+        
+        /* 7. 행복 저장소 카드 */
+        .happy-card {{
+            background: #fff9c4; border-left: 6px solid #FFD700;
+        }}
+        .happy-text {{ color: {main_text}; }}
+
+        /* 8. 로그인 박스 스타일 */
+        .login-box {{
+            background: rgba(255, 255, 255, 0.6); padding: 2rem; border-radius: 20px;
         }}
 
-        header {{visibility: hidden;}}
-        footer {{visibility: hidden;}}
+        header {{visibility: hidden;}} footer {{visibility: hidden;}}
         </style>
     """
     st.markdown(css, unsafe_allow_html=True)
@@ -206,14 +155,11 @@ def apply_custom_css():
 @st.cache_resource
 def get_gsheets_client():
     try:
-        # Note: In a real environment, use st.secrets properly.
-        # For this example, we assume secrets are correctly set up or mocked.
         creds = st.secrets["connections"]["gsheets"]
         scope = ['https://www.googleapis.com/auth/spreadsheets', 'https://www.googleapis.com/auth/drive']
         credentials = Credentials.from_service_account_info(creds, scopes=scope)
         return gspread.authorize(credentials)
     except Exception as e:
-        # st.error(f"GSHEET Client Error: {e}") 
         return None
 
 @st.cache_resource(ttl=3600)
@@ -222,19 +168,17 @@ def init_db():
     if not client: return None
     try:
         sh = client.open(GSHEET_DB_NAME)
-        # ワークシートが存在하는지 확인 (이 부분은 실제로 워크시트 이름을 사용해야 함)
         sh.worksheet("users")
         sh.worksheet("diaries")
         return sh
     except Exception as e:
-        # st.error(f"❌ DB 연결 실패: 시트 이름/공유 권한 확인 필요. (에러 유형: {type(e).__name__})")
+        st.error(f"❌ DB 연결 실패: 시트 이름/공유 권한 확인 필요. (에러 유형: {type(e).__name__})")
         return None 
 
 def get_all_users(sh):
     if not sh: return {}
     try:
         rows = sh.worksheet("users").get_all_records()
-        # id와 password를 문자열로 변환하여 저장
         return {str(row['username']): str(row['password']) for row in rows}
     except: return {}
 
@@ -253,7 +197,6 @@ def get_user_diaries(_sh, username):
         user_diaries = {}
         for row in rows:
             if str(row['username']) == str(username):
-                # 일기 내용을 딕셔너리에 저장
                 user_diaries[row['date']] = {"emotion": row['emotion'], "text": row['text']}
         return user_diaries
     except: return {}
@@ -262,18 +205,12 @@ def add_diary(sh, username, date, emotion, text):
     if not sh: return False
     try:
         ws = sh.worksheet("diaries")
-        # 해당 날짜에 이미 작성한 일기가 있는지 확인
-        cell = ws.find(date, in_column=2) 
-        
-        # 해당 셀이 존재하고, 그 행의 1열(username)이 현재 사용자명과 일치하는 경우 수정
+        cell = ws.find(date, in_column=2)
         if cell and str(ws.cell(cell.row, 1).value) == str(username):
-            ws.update_cell(cell.row, 3, emotion) # 감정 업데이트
-            ws.update_cell(cell.row, 4, text)    # 텍스트 업데이트
+            ws.update_cell(cell.row, 3, emotion)
+            ws.update_cell(cell.row, 4, text)
         else:
-            # 새로운 일기 작성
             ws.append_row([username, date, emotion, text])
-            
-        # 캐시 초기화
         get_user_diaries.clear()
         return True
     except: return False
@@ -283,7 +220,6 @@ def add_diary(sh, username, date, emotion, text):
 # =========================================
 @st.cache_resource
 def load_emotion_model():
-    # ... (모델 로딩 로직은 동일)
     try:
         tokenizer = AutoTokenizer.from_pretrained(EMOTION_MODEL_ID)
         model = AutoModelForSequenceClassification.from_pretrained(EMOTION_MODEL_ID)
@@ -291,13 +227,11 @@ def load_emotion_model():
         model.to(device)
         cfg_id2label = getattr(model.config, "id2label", None)
         if isinstance(cfg_id2label, dict) and cfg_id2label: id2label = {int(k): v for k, v in cfg_id2label.items()}
-        # 모델의 id2label이 없거나 로드되지 않을 경우 비상용 라벨 사용
         else: id2label = {0: "기쁨", 1: "분노", 2: "불안", 3: "슬픔", 4: "중립", 5: "힘듦"}
         return model, tokenizer, device, id2label
     except Exception as e: return None, None, None, None
 
 def analyze_diary(text, model, tokenizer, device, id2label):
-    # ... (일기 분석 로직은 동일)
     if not text or model is None: return None, 0.0
     enc = tokenizer(text, truncation=True, padding=True, max_length=256, return_tensors="pt")
     for k in enc: enc[k] = enc[k].to(device)
@@ -309,18 +243,16 @@ def analyze_diary(text, model, tokenizer, device, id2label):
 
 @st.cache_resource
 def get_spotify_client():
-    # ... (Spotify 클라이언트 로딩 로직은 동일)
     if not SPOTIPY_AVAILABLE: return "라이브러리 없음"
     try:
         creds = st.secrets["spotify"]
         manager = SpotifyClientCredentials(client_id=creds["client_id"], client_secret=creds["client_secret"])
         sp = spotipy.Spotify(client_credentials_manager=manager, retries=3, backoff_factor=0.3)
-        sp.search(q="test", limit=1) # 연결 테스트
+        sp.search(q="test", limit=1)
         return sp
     except: return "로그인 실패"
 
 def recommend_music(emotion):
-    # ... (음악 추천 로직은 동일)
     sp = get_spotify_client()
     if not isinstance(sp, spotipy.Spotify): return [{"error": sp}]
     SEARCH_KEYWORDS = {
@@ -337,16 +269,14 @@ def recommend_music(emotion):
         random.shuffle(playlists)
         for pl in playlists:
             try:
-                # 플레이리스트 내 트랙 가져오기
                 tracks = sp.playlist_items(pl["id"], limit=30)
                 items = tracks.get("items", []) if tracks else []
                 for it in items:
                     t = it.get("track")
                     if t and t.get("id"): valid_tracks.append({"id": t["id"], "title": t["name"]})
-                if len(valid_tracks) >= 10: break # 충분한 트랙을 찾으면 종료
+                if len(valid_tracks) >= 10: break
             except: continue
         if not valid_tracks: return [{"error": "곡 없음"}]
-        # 중복 제거 및 3곡 랜덤 선택
         seen = set(); unique = []
         for v in valid_tracks:
             if v["id"] not in seen: unique.append(v); seen.add(v["id"])
@@ -354,7 +284,6 @@ def recommend_music(emotion):
     except Exception as e: return [{"error": f"오류: {e}"}]
 
 def recommend_movies(emotion):
-    # ... (영화 추천 로직은 동일)
     key = st.secrets.get("tmdb", {}).get("api_key") or st.secrets.get("TMDB_API_KEY") or EMERGENCY_TMDB_KEY
     if not key: return [{"text": "API 키 없음", "poster": None}]
     GENRES = {"기쁨": "35|10749", "분노": "28|12", "불안": "16|10751", "슬픔": "18", "힘듦": "18|10402", "중립": "35|18"}
@@ -376,16 +305,14 @@ def recommend_movies(emotion):
 # =========================================
 # 🖥️ 화면 및 네비게이션 로직
 # =========================================
-# ⭐️ 세션 상태 초기화 및 CSS 적용
+apply_custom_css()
+
 if "logged_in" not in st.session_state: st.session_state.logged_in = False
 if "page" not in st.session_state: st.session_state.page = "intro" 
-if "dark_mode" not in st.session_state: st.session_state.dark_mode = False # 야간 모드 상태 추가
-
-apply_custom_css()
+if "dark_mode" not in st.session_state: st.session_state.dark_mode = False # ⭐️ 야간 모드 상태 초기화
 
 # 0. 표지 (Intro) 페이지
 def intro_page():
-    # ... (표지 페이지 로직은 동일)
     st.write("")
     st.write("")
     c1, c2, c3 = st.columns([1, 2, 1])
@@ -403,13 +330,12 @@ def intro_page():
 
 # 1. 로그인 페이지
 def login_page():
-    # ... (로그인 페이지 로직은 동일)
     sh = init_db()
     
-    # ⭐️ [레이아웃] 로그인/문구 크기 맞춰서 조정
     c1, c2 = st.columns([0.6, 0.4])
 
     with c1:
+        # ⭐️ [애니메이션 적용] 로그인 페이지 MOODIARY 로고
         st.markdown("""
             <div style='padding-top: 5rem;'>
                 <h1 class='animated-title'>MOODIARY</h1>
@@ -442,18 +368,17 @@ def login_page():
                     st.rerun()
                 else: st.error("아이디/비밀번호 오류")
                 
-        with tab2: # 회원가입 탭은 탭1의 컨텍스트 내부에 있어야 합니다.
-            nid = st.text_input("새 아이디", key="nid")
-            npw = st.text_input("새 비밀번호 (4자리)", type="password", key="npw", max_chars=4)
-            if st.button("가입하기", use_container_width=True, key="signup_btn"):
-                users = get_all_users(sh)
-                if str(nid) in users: st.error("이미 존재함")
-                elif len(nid)<1 or len(npw)!=4: st.error("형식 확인 (비번 4자리)")
-                else:
-                    if add_user(sh, nid, npw): st.success("가입 성공! 로그인하세요.")
-                    else: st.error("가입 실패")
+            with tab2:
+                nid = st.text_input("새 아이디", key="nid")
+                npw = st.text_input("새 비밀번호 (4자리)", type="password", key="npw", max_chars=4)
+                if st.button("가입하기", use_container_width=True, key="signup_btn"):
+                    users = get_all_users(sh)
+                    if str(nid) in users: st.error("이미 존재함")
+                    elif len(nid)<1 or len(npw)!=4: st.error("형식 확인 (비번 4자리)")
+                    else:
+                        if add_user(sh, nid, npw): st.success("가입 성공! 로그인하세요.")
+                        else: st.error("가입 실패")
         st.markdown("</div>", unsafe_allow_html=True)
-
 
 # 2. 메인 앱
 def main_app():
@@ -463,52 +388,32 @@ def main_app():
         if st.button("🔄 새로고침"): st.rerun()
         return
 
-    # --- 사이드바 (목차) ---
+    # --- 사이드바 (목차 + 토글) ---
     with st.sidebar:
         st.markdown(f"### 👋 **{st.session_state.username}**님")
-        
-        menu_options = {
-            "📝 일기 작성": "write", 
-            "📅 감정 달력": "dashboard", 
-            "🎵 음악/영화 추천": "result", 
-            "📊 통계 보기": "stats", 
-            "📂 행복 저장소": "happy"
-        }
-        
-        # ⭐️ 야간 모드 버튼을 메뉴에 통합
-        night_mode_label = "🌙 야간 모드" if not st.session_state.dark_mode else "☀️ 일반 모드"
-        
-        menu_list = list(menu_options.keys())
-        menu_list.append(night_mode_label) # 마지막에 야간 모드 버튼 추가
-        
         st.write("")
-        # 현재 페이지를 기준으로 초기 선택값 설정
-        current_page_label = next((k for k, v in menu_options.items() if v == st.session_state.page), menu_list[0])
         
-        # 야간 모드 상태에 따라 초기값 조정 (야간모드 상태는 페이지 이동이 아니므로 제외)
-        try:
-            default_index = menu_list.index(current_page_label)
-        except ValueError:
-            # 현재 페이지 레이블이 메뉴 리스트에 없는 경우 (예: 로그아웃 버튼을 눌렀을 때)
-            default_index = 0
-
-        # st.radio를 사용하여 안정적인 네비게이션 구현
-        selected_menu = st.radio(
-            "메뉴", 
-            options=menu_list, 
-            index=default_index,
-            key="sidebar_menu"
+        # ⭐️ [토글 버튼] 야간 모드 버튼 (체크박스 사용)
+        is_dark_mode = st.checkbox(
+            "🌙 야간 모드", 
+            value=st.session_state.dark_mode,
+            key="toggle_dark_mode",
+            help="클릭하여 앱의 테마를 밝은 모드와 어두운 모드로 전환합니다."
         )
         
-        # 메뉴 선택 시 페이지 전환 또는 야간 모드 토글
-        if selected_menu != current_page_label and selected_menu != night_mode_label:
-            st.session_state.page = menu_options[selected_menu]
+        # 야간 모드 상태 변경 시 CSS 갱신을 위해 rerun
+        if is_dark_mode != st.session_state.dark_mode:
+            st.session_state.dark_mode = is_dark_mode
             st.rerun()
-        elif selected_menu == night_mode_label:
-            # 야간 모드 토글
-            st.session_state.dark_mode = not st.session_state.dark_mode
-            # 야간 모드 버튼을 눌렀지만 페이지는 그대로 유지
-            st.rerun()
+
+        st.divider()
+        
+        # ⭐️ [목차] 안정적인 st.button으로 구현
+        if st.button("📝 일기 작성", use_container_width=True, key="sb_write"): st.session_state.page = "write"; st.rerun()
+        if st.button("📅 감정 달력", use_container_width=True, key="sb_calendar"): st.session_state.page = "dashboard"; st.rerun()
+        if st.button("🎵 음악/영화 추천", use_container_width=True, key="sb_recommend"): st.session_state.page = "result"; st.rerun()
+        if st.button("📊 통계 보기", use_container_width=True, key="sb_stats"): st.session_state.page = "stats"; st.rerun()
+        if st.button("📂 행복 저장소", use_container_width=True, key="sb_happy"): st.session_state.page = "happy"; st.rerun()
 
         st.divider()
         if st.button("🚪 로그아웃", use_container_width=True, key="sb_logout"):
@@ -525,7 +430,6 @@ def main_app():
 
 # --- 페이지 함수들 ---
 def page_write(sh):
-    # ... (일기 작성 페이지 로직은 동일)
     st.markdown("## 📝 오늘의 이야기")
     model, tokenizer, device, id2label = load_emotion_model()
     if not model: st.error("AI 로드 실패"); return
@@ -546,7 +450,6 @@ def page_write(sh):
             st.rerun()
 
 def page_dashboard(sh):
-    # ... (감정 달력 페이지 로직은 동일)
     st.markdown("## 📅 감정 달력")
     cols = st.columns(6)
     for i, (k, v) in enumerate(EMOTION_META.items()):
@@ -595,7 +498,6 @@ def page_dashboard(sh):
             st.rerun()
 
 def page_recommend(sh):
-    # ... (음악/영화 추천 페이지 로직은 동일)
     st.markdown("## 🎵 음악/영화 추천")
 
     if "final_emotion" not in st.session_state:
@@ -624,11 +526,7 @@ def page_recommend(sh):
             st.session_state.music_recs = recommend_music(emo)
             st.rerun()
         for item in st.session_state.get("music_recs", []):
-            if item.get('id'): 
-                # Spotify 임베드 코드는 http://googleusercontent.com/spotify.com/oembed 방식으로 작성
-                embed_url = f"https://open.spotify.com/embed/track/{item['id']}?utm_source=generator"
-                components.iframe(embed_url, height=80, width="100%") 
-
+            if item.get('id'): components.iframe(f"https://open.spotify.com/embed/track/{item['id']}", height=250, width="100%")
     with c2:
         st.markdown("#### 🎬 추천 영화")
         if st.button("🔄 영화 새로고침", use_container_width=True, key="movie_refresh"):
@@ -637,14 +535,8 @@ def page_recommend(sh):
         for item in st.session_state.get('movie_recs', []):
             if item.get('poster'):
                 ic, tc = st.columns([1, 2])
-                with ic:
-                    st.image(item['poster'], use_container_width=True)
-                with tc:
-                    st.markdown(f"""
-                        **{item['title']} ({item['year']})**\n
-                        ⭐ **{item['rating']:.1f}**\n\n
-                        *{item.get('overview','')}*
-                    """)
+                ic.image(item['poster'], use_container_width=True)
+                tc.markdown(f"**{item['title']} ({item['year']})**\n⭐ {item['rating']}\n\n*{item.get('overview','')}*")
 
     st.divider()
     b1, b2, b3 = st.columns(3)
@@ -656,7 +548,6 @@ def page_recommend(sh):
         if st.button("📂 행복 저장소", use_container_width=True, key="rec_happy"): st.session_state.page = "happy"; st.rerun()
 
 def page_stats(sh):
-    # ... (통계 페이지 로직은 동일)
     st.markdown("## 📊 나의 감정 통계")
     
     if "stats_year" not in st.session_state:
@@ -706,7 +597,7 @@ def page_stats(sh):
         most_common_emo = max(set(month_data), key=month_data.count)
         total_count = len(month_data)
 
-        # 간결한 통계 카드 (CSS가 없어서 임시로 마크다운 사용)
+        sc1, sc2 = st.columns(2)
         st.markdown(f"""
             <div style='display:flex; justify-content:space-around; text-align:center;'>
                 <div style='padding:10px; border-radius:10px; background:#f0f0f0;'>
@@ -747,24 +638,18 @@ def page_stats(sh):
     with b2:
         if st.button("📂 행복 저장소 보러가기", use_container_width=True, key="stats_happy"): st.session_state.page = "happy"; st.rerun()
 
-
 def page_happy_storage(sh):
-    # ⭐️ [디자인 개선] 행복 저장소
     st.markdown("## 📂 행복 저장소")
     st.markdown("내가 **'기쁨'**을 느꼈던 순간들만 모아봤어요. 🥰")
     my_diaries = get_user_diaries(sh, st.session_state.username)
     happy_moments = {date: data for date, data in my_diaries.items() if data['emotion'] == '기쁨'}
     
     if not happy_moments:
-        st.info("아직 기록된 기쁨의 순간이 없어요. 기쁜 일이 있다면 기록해보세요!")
+        st.info("아직 기록된 기쁨의 순간이 없어요.")
     else:
         dates = sorted(happy_moments.keys(), reverse=True)
-        
-        # 날짜별로 2열 그리드 형식으로 카드 표시
         for i in range(0, len(dates), 2):
             cols = st.columns(2)
-            
-            # 첫 번째 카드
             date1 = dates[i]
             data1 = happy_moments[date1]
             with cols[0]:
@@ -775,7 +660,6 @@ def page_happy_storage(sh):
                 </div>
                 """, unsafe_allow_html=True)
             
-            # 두 번째 카드 (있을 경우)
             if i + 1 < len(dates):
                 date2 = dates[i+1]
                 data2 = happy_moments[date2]
@@ -793,7 +677,6 @@ def page_happy_storage(sh):
         if st.button("📅 달력 보기", use_container_width=True, key="happy_cal"): st.session_state.page = "dashboard"; st.rerun()
     with b2:
         if st.button("📊 통계 보러가기", use_container_width=True, key="happy_stats"): st.session_state.page = "stats"; st.rerun()
-
 
 # --- 메인 실행 로직 ---
 if st.session_state.logged_in: main_app()
