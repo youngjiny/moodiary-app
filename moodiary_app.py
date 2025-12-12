@@ -42,23 +42,25 @@ KST = timezone(timedelta(hours=9))
 
 st.set_page_config(layout="wide", page_title="MOODIARY", page_icon="💖")
 
-# ⭐️ 커스텀 CSS (가시성 및 야간 모드 완벽 개선)
+# ⭐️ 커스텀 CSS (야간 모드 CSS 조건부 렌더링)
 def apply_custom_css():
     
     is_dark = st.session_state.get("dark_mode", False)
     
+    # 테마 색상 정의 (주간/야간)
     if is_dark:
         bg_start = "#121212"
         bg_mid = "#2c2c2c"
         bg_end = "#403A4E"
         
         main_bg = "rgba(40, 40, 40, 0.9)"
-        main_text = "#f0f0f0"
+        main_text = "#f0f0f0" # ⭐️ 텍스트 밝게
+        secondary_text = "#bbbbbb" # 감정 설명 등 보조 텍스트
         sidebar_bg = "#1e1e1e"
         menu_checked = "#A29BFE"
         card_bg = "#4a4a4a" 
-        card_text_happy = "#ffffff" # 행복 저장소 텍스트 색상
-        stat_card_bg = "transparent" # ⭐️ 통계 요약 배경 제거
+        card_text_happy = "#ffffff" 
+        stat_card_border = "1px solid #444444" # 야간 모드 통계 테두리
     else:
         bg_start = "#ee7752"
         bg_mid = "#e73c7e"
@@ -66,11 +68,12 @@ def apply_custom_css():
         
         main_bg = "rgba(255, 255, 255, 0.85)"
         main_text = "#333333"
+        secondary_text = "#666666"
         sidebar_bg = "#f8f9fa"
         menu_checked = "#6C5CE7"
         card_bg = "#fff9c4"
         card_text_happy = "#2c3e50"
-        stat_card_bg = "white"
+        stat_card_border = "1px solid rgba(128,128,128,0.3)"
 
     css = f"""
         <style>
@@ -103,11 +106,13 @@ def apply_custom_css():
             max-width: 1000px;
         }}
         
-        /* 4. ⭐️ 텍스트 가시성 확보 (모든 기본 텍스트 및 입력창 라벨) */
+        /* 4. ⭐️ 텍스트 가시성 확보 (모든 기본 텍스트) */
         p, label, .stMarkdown, .stTextarea, .stTextInput, .stCheckbox, [data-testid^="stBlock"] {{ color: {main_text} !important; }}
         section[data-testid="stSidebar"] * {{ color: {main_text} !important; }}
         section[data-testid="stSidebar"] {{ background-color: {sidebar_bg} !important; }}
-        
+        /* 감정 설명 문구 (조마조마해요 등) 가시성 보장 */
+        .stMarkdown h4 {{ color: {secondary_text} !important; }} 
+
         /* 5. 버튼 스타일 */
         .stButton > button {{
             width: 100%; border-radius: 20px; border: none;
@@ -129,32 +134,31 @@ def apply_custom_css():
         .happy-card {{
             background: {card_bg}; border-left: 6px solid #FFD700;
             padding: 25px; border-radius: 20px; box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+            margin-bottom: 15px; /* ⭐️ 겹침 방지 */
+            height: auto; /* ⭐️ 높이 자동 설정 */
         }}
-        .happy-date {{ color: {main_text}; font-weight: 700; }}
-        .happy-text {{ 
-            font-size: 1.4em; font-weight: 600; line-height: 1.5; 
-            color: {card_text_happy}; /* 가시성 높임 */
-        }}
+        .happy-date {{ color: {main_text}; font-weight: 700; margin-bottom: 12px; }}
+        .happy-text {{ font-size: 1.4em; font-weight: 600; line-height: 1.5; color: {card_text_happy}; }}
 
-        /* 8. 통계 요약 카드 (배경 제거) */
+        /* 8. ⭐️ 통계 요약 카드 (선 제거) ⭐️ */
         .stat-card {{
-            background: {stat_card_bg}; /* ⭐️ 배경 제거 */
-            box-shadow: none; /* ⭐️ 그림자 제거 */
+            background: transparent; /* 배경 제거 */
+            box-shadow: none; /* 그림자 제거 */
             padding: 10px; border-radius: 10px;
-            border: 1px solid rgba(128,128,128,0.3); /* 테두리로 구별 */
+            border: none; /* ⭐️ 선(border) 제거 */
+            border-right: 1px solid rgba(128,128,128,0.3); /* 항목 구분선만 유지 */
         }}
+        /* 마지막 항목은 오른쪽 선도 제거 */
+        .stat-card:last-child {{ border-right: none; }}
         
-        /* 9. MOODIARY 텍스트 색상 애니메이션 */
+        /* 9. MOODIARY 텍스트 애니메이션 */
         @keyframes color-shift {{
             0% {{ color: #6C5CE7; }}
             33% {{ color: #FF7675; }}
             66% {{ color: #23a6d5; }}
             100% {{ color: #6C5CE7; }}
         }}
-        .animated-title {{
-            font-size: 3.5rem !important; font-weight: 800;
-            animation: color-shift 5s ease-in-out infinite alternate;
-        }}
+        .animated-title {{ font-size: 3.5rem !important; font-weight: 800; animation: color-shift 5s ease-in-out infinite alternate; }}
 
         header {{visibility: hidden;}} footer {{visibility: hidden;}}
         </style>
@@ -409,9 +413,10 @@ def main_app():
             "🌙 야간 모드", 
             value=st.session_state.dark_mode,
             key="toggle_dark_mode",
-            help="클릭하여 앱의 테마를 전환합니다."
+            help="클릭하여 앱의 테마를 밝은 모드와 어두운 모드로 전환합니다."
         )
         
+        # 야간 모드 상태 변경 시 CSS 갱신을 위해 rerun
         if is_dark_mode != st.session_state.dark_mode:
             st.session_state.dark_mode = is_dark_mode
             st.rerun()
@@ -607,14 +612,14 @@ def page_stats(sh):
         most_common_emo = max(set(month_data), key=month_data.count)
         total_count = len(month_data)
 
-        # ⭐️ 통계 요약 배경 제거 적용
+        # ⭐️ 통계 요약 배경 제거 (stat-card CSS에서 처리)
         st.markdown(f"""
             <div style='display:flex; justify-content:space-around; text-align:center;'>
-                <div class='stat-card'>
+                <div class='stat-card' style='flex:1;'>
                     <div style='font-size:1.8em; font-weight:700; color:#6C5CE7;'>{total_count}개</div>
                     <div style='font-size:0.9em; color:#555;'>총 기록 수</div>
                 </div>
-                <div class='stat-card'>
+                <div class='stat-card' style='flex:1; margin-left: 10px;'>
                     <div style='font-size:1.8em; font-weight:700; color:{EMOTION_META[most_common_emo]['color'].replace('0.6', '1.0')}'>{EMOTION_META[most_common_emo]['emoji']} {most_common_emo}</div>
                     <div style='font-size:0.9em; color:#555;'>가장 많이 느낀 감정</div>
                 </div>
@@ -650,7 +655,7 @@ def page_stats(sh):
 
 def page_happy_storage(sh):
     st.markdown("## 📂 행복 저장소")
-    st.markdown("내가 **'기쁨'**을 느꼈던 순간들만 모아봤어요. 🥰") # ⭐️ 마크다운 기호 제거 완료
+    st.markdown("내가 '기쁨'을 느꼈던 순간들만 모아봤어요. 🥰") # ⭐️ 마크다운 기호 제거 완료
     my_diaries = get_user_diaries(sh, st.session_state.username)
     happy_moments = {date: data for date, data in my_diaries.items() if data['emotion'] == '기쁨'}
     
@@ -658,6 +663,7 @@ def page_happy_storage(sh):
         st.info("아직 기록된 기쁨의 순간이 없어요.")
     else:
         dates = sorted(happy_moments.keys(), reverse=True)
+        # 2열 그리드 출력
         for i in range(0, len(dates), 2):
             cols = st.columns(2)
             date1 = dates[i]
