@@ -48,19 +48,21 @@ def apply_custom_css():
     is_dark = st.session_state.get("dark_mode", False)
     
     if is_dark:
+        # 야간 모드 색상
         bg_start = "#121212"
         bg_mid = "#2c2c2c"
         bg_end = "#403A4E"
         
         main_bg = "rgba(40, 40, 40, 0.9)"
-        main_text = "#f0f0f0" # ⭐️ 텍스트 밝게
-        secondary_text = "#bbbbbb" # ⭐️ 감정 설명 등 보조 텍스트 밝게
+        main_text = "#f0f0f0"       # ⭐️ 기본 텍스트 (흰색)
+        secondary_text = "#bbbbbb"  # ⭐️ 보조 텍스트 (연한 회색)
         sidebar_bg = "#1e1e1e"
         menu_checked = "#A29BFE"
-        card_bg = "#3a3a3a" # 어두운 행복 저장소 배경
-        card_text_happy = "#ffffff" # 행복 저장소 텍스트 색상
-        stat_card_border = "1px solid #444444" 
+        card_bg = "#3a3a3a"         # 어두운 행복 저장소 배경
+        card_text_happy = "#ffffff" # 행복 저장소 텍스트 (흰색)
+        stat_card_line = "1px solid #444444" # 통계 구분선
     else:
+        # 주간 모드 색상
         bg_start = "#ee7752"
         bg_mid = "#e73c7e"
         bg_end = "#23d5ab"
@@ -72,7 +74,7 @@ def apply_custom_css():
         menu_checked = "#6C5CE7"
         card_bg = "#fff9c4"
         card_text_happy = "#2c3e50"
-        stat_card_border = "none" # ⭐️ 주간 모드에서 선 제거
+        stat_card_line = "none"
 
     css = f"""
         <style>
@@ -105,11 +107,16 @@ def apply_custom_css():
             max-width: 1000px;
         }}
         
-        /* 4. ⭐️ 텍스트 가시성 확보 (모든 기본 텍스트) */
+        /* 4. ⭐️ 텍스트 가시성 확보 */
         p, label, .stMarkdown, .stTextarea, .stTextInput, .stCheckbox, [data-testid^="stBlock"] {{ color: {main_text} !important; }}
         section[data-testid="stSidebar"] * {{ color: {main_text} !important; }}
         section[data-testid="stSidebar"] {{ background-color: {sidebar_bg} !important; }}
+        
+        /* 감정 설명 문구 (조마조마해요 등) */
         .stMarkdown h4 {{ color: {secondary_text} !important; }} 
+        /* 입력창 힌트 텍스트 가시성 보장 */
+        .stTextInput, .stTextarea {{ color: {secondary_text} !important; }}
+
 
         /* 5. 버튼 스타일 */
         .stButton > button {{
@@ -136,18 +143,21 @@ def apply_custom_css():
             height: auto;
         }}
         .happy-date {{ color: {main_text}; font-weight: 700; margin-bottom: 12px; }}
-        .happy-text {{ font-size: 1.4em; font-weight: 600; line-height: 1.5; color: {card_text_happy}; }}
+        .happy-text {{ 
+            font-size: 1.4em; font-weight: 600; line-height: 1.5; 
+            color: {card_text_happy}; /* 대비 확보 */
+        }}
 
         /* 8. ⭐️ 통계 요약 카드 (선/배경 제거) */
         .stat-card {{
             background: transparent;
             box-shadow: none;
-            padding: 10px 0; /* 내부 패딩 조정 */
-            border: none; /* 선 제거 */
+            padding: 10px 0; 
+            border: none; 
             text-align: center;
         }}
         /* 통계 요약 카드 간 구분선 (수직선) */
-        .stat-card:first-child {{ border-right: 1px solid {secondary_text}; }} 
+        .stat-card:first-child {{ border-right: {stat_card_line}; }} 
         
         /* 9. MOODIARY 텍스트 애니메이션 */
         @keyframes color-shift {{
@@ -616,13 +626,13 @@ def page_stats(sh):
         # ⭐️ 통계 요약 배경 제거 적용
         st.markdown(f"""
             <div style='display:flex; justify-content:space-around; text-align:center;'>
-                <div class='stat-card' style='flex:1;'>
+                <div class='stat-card' style='flex:1; border-right: 1px solid {('rgba(128,128,128,0.3)' if not st.session_state.dark_mode else '#444444')};'>
                     <div style='font-size:1.8em; font-weight:700; color:#6C5CE7;'>{total_count}개</div>
-                    <div style='font-size:0.9em; color:#555;'>총 기록 수</div>
+                    <div style='font-size:0.9em; color:{'#555' if not st.session_state.dark_mode else '#bbbbbb'};'>총 기록 수</div>
                 </div>
                 <div class='stat-card' style='flex:1; margin-left: 10px;'>
                     <div style='font-size:1.8em; font-weight:700; color:{EMOTION_META[most_common_emo]['color'].replace('0.6', '1.0')}'>{EMOTION_META[most_common_emo]['emoji']} {most_common_emo}</div>
-                    <div style='font-size:0.9em; color:#555;'>가장 많이 느낀 감정</div>
+                    <div style='font-size:0.9em; color:{'#555' if not st.session_state.dark_mode else '#bbbbbb'};'>가장 많이 느낀 감정</div>
                 </div>
             </div>
             <br>
@@ -656,7 +666,10 @@ def page_stats(sh):
 
 def page_happy_storage(sh):
     st.markdown("## 📂 행복 저장소")
-    st.markdown("내가 '기쁨'을 느꼈던 순간들만 모아봤어요. 🥰")
+    # ⭐️ 마크다운 기호 완전히 제거 및 텍스트 색상 확보
+    text_color = "#555" if not st.session_state.dark_mode else "#bbbbbb"
+    st.markdown(f"<p style='color:{text_color};'>내가 '기쁨'을 느꼈던 순간들만 모아봤어요. 🥰</p>", unsafe_allow_html=True)
+    
     my_diaries = get_user_diaries(sh, st.session_state.username)
     happy_moments = {date: data for date, data in my_diaries.items() if data['emotion'] == '기쁨'}
     
@@ -665,7 +678,7 @@ def page_happy_storage(sh):
     else:
         dates = sorted(happy_moments.keys(), reverse=True)
         for i in range(0, len(dates), 2):
-            cols = st.columns(2)
+            cols = st.columns(2, gap="large") # ⭐️ 겹침 방지를 위해 간격 확보
             date1 = dates[i]
             data1 = happy_moments[date1]
             with cols[0]:
