@@ -42,22 +42,23 @@ KST = timezone(timedelta(hours=9))
 
 st.set_page_config(layout="wide", page_title="MOODIARY", page_icon="💖")
 
-# ⭐️ 커스텀 CSS (야간 모드 CSS 조건부 렌더링)
+# ⭐️ 커스텀 CSS (가시성 및 야간 모드 완벽 개선)
 def apply_custom_css():
     
     is_dark = st.session_state.get("dark_mode", False)
     
-    # 테마 색상 정의 (주간/야간)
     if is_dark:
-        # ⭐️ [야간 모드 배경] 검정-회색-어두운 보라 계열로 변경
-        bg_start = "#121212" # 진한 검정
-        bg_mid = "#2c2c2c"   # 회색
-        bg_end = "#403A4E"   # 어두운 보라
+        bg_start = "#121212"
+        bg_mid = "#2c2c2c"
+        bg_end = "#403A4E"
         
-        main_bg = "rgba(40, 40, 40, 0.9)" # 메인 컨테이너 어둡게
-        main_text = "#f0f0f0" # ⭐️ 텍스트 색상 밝게
+        main_bg = "rgba(40, 40, 40, 0.9)"
+        main_text = "#f0f0f0"
         sidebar_bg = "#1e1e1e"
-        menu_checked = "#A29BFE" # 밝은 보라
+        menu_checked = "#A29BFE"
+        card_bg = "#4a4a4a" 
+        card_text_happy = "#ffffff" # 행복 저장소 텍스트 색상
+        stat_card_bg = "transparent" # ⭐️ 통계 요약 배경 제거
     else:
         bg_start = "#ee7752"
         bg_mid = "#e73c7e"
@@ -67,6 +68,9 @@ def apply_custom_css():
         main_text = "#333333"
         sidebar_bg = "#f8f9fa"
         menu_checked = "#6C5CE7"
+        card_bg = "#fff9c4"
+        card_text_happy = "#2c3e50"
+        stat_card_bg = "white"
 
     css = f"""
         <style>
@@ -99,16 +103,17 @@ def apply_custom_css():
             max-width: 1000px;
         }}
         
-        /* 4. ⭐️ 텍스트 가시성 확보 (모든 기본 텍스트) */
+        /* 4. ⭐️ 텍스트 가시성 확보 (모든 기본 텍스트 및 입력창 라벨) */
         p, label, .stMarkdown, .stTextarea, .stTextInput, .stCheckbox, [data-testid^="stBlock"] {{ color: {main_text} !important; }}
         section[data-testid="stSidebar"] * {{ color: {main_text} !important; }}
         section[data-testid="stSidebar"] {{ background-color: {sidebar_bg} !important; }}
-
+        
         /* 5. 버튼 스타일 */
         .stButton > button {{
             width: 100%; border-radius: 20px; border: none;
             background: linear-gradient(90deg, #6C5CE7 0%, #a29bfe 100%);
             color: white; font-weight: 700; padding: 0.6rem 1rem;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1); transition: all 0.3s ease;
         }}
         .stButton > button:hover {{ transform: translateY(-2px); filter: brightness(1.1); }}
 
@@ -122,11 +127,24 @@ def apply_custom_css():
 
         /* 7. 행복 저장소 카드 */
         .happy-card {{
-            background: #fff9c4; border-left: 6px solid #FFD700;
+            background: {card_bg}; border-left: 6px solid #FFD700;
+            padding: 25px; border-radius: 20px; box-shadow: 0 4px 10px rgba(0,0,0,0.1);
         }}
-        .happy-text {{ color: {main_text}; }}
+        .happy-date {{ color: {main_text}; font-weight: 700; }}
+        .happy-text {{ 
+            font-size: 1.4em; font-weight: 600; line-height: 1.5; 
+            color: {card_text_happy}; /* 가시성 높임 */
+        }}
 
-        /* 8. MOODIARY 텍스트 색상 애니메이션 및 크기 조정 */
+        /* 8. 통계 요약 카드 (배경 제거) */
+        .stat-card {{
+            background: {stat_card_bg}; /* ⭐️ 배경 제거 */
+            box-shadow: none; /* ⭐️ 그림자 제거 */
+            padding: 10px; border-radius: 10px;
+            border: 1px solid rgba(128,128,128,0.3); /* 테두리로 구별 */
+        }}
+        
+        /* 9. MOODIARY 텍스트 색상 애니메이션 */
         @keyframes color-shift {{
             0% {{ color: #6C5CE7; }}
             33% {{ color: #FF7675; }}
@@ -136,8 +154,6 @@ def apply_custom_css():
         .animated-title {{
             font-size: 3.5rem !important; font-weight: 800;
             animation: color-shift 5s ease-in-out infinite alternate;
-            display: inline-block; 
-            margin-bottom: 0;
         }}
 
         header {{visibility: hidden;}} footer {{visibility: hidden;}}
@@ -388,15 +404,14 @@ def main_app():
         st.markdown(f"### 👋 **{st.session_state.username}**님")
         st.write("")
         
-        # ⭐️ [토글 버튼] 야간 모드 버튼 (체크박스 사용)
+        # ⭐️ [토글 버튼] 야간 모드 버튼
         is_dark_mode = st.checkbox(
             "🌙 야간 모드", 
             value=st.session_state.dark_mode,
             key="toggle_dark_mode",
-            help="클릭하여 앱의 테마를 밝은 모드와 어두운 모드로 전환합니다."
+            help="클릭하여 앱의 테마를 전환합니다."
         )
         
-        # 야간 모드 상태 변경 시 CSS 갱신을 위해 rerun
         if is_dark_mode != st.session_state.dark_mode:
             st.session_state.dark_mode = is_dark_mode
             st.rerun()
@@ -592,14 +607,14 @@ def page_stats(sh):
         most_common_emo = max(set(month_data), key=month_data.count)
         total_count = len(month_data)
 
-        sc1, sc2 = st.columns(2)
+        # ⭐️ 통계 요약 배경 제거 적용
         st.markdown(f"""
             <div style='display:flex; justify-content:space-around; text-align:center;'>
-                <div style='padding:10px; border-radius:10px; background:#f0f0f0;'>
+                <div class='stat-card'>
                     <div style='font-size:1.8em; font-weight:700; color:#6C5CE7;'>{total_count}개</div>
                     <div style='font-size:0.9em; color:#555;'>총 기록 수</div>
                 </div>
-                <div style='padding:10px; border-radius:10px; background:#f0f0f0;'>
+                <div class='stat-card'>
                     <div style='font-size:1.8em; font-weight:700; color:{EMOTION_META[most_common_emo]['color'].replace('0.6', '1.0')}'>{EMOTION_META[most_common_emo]['emoji']} {most_common_emo}</div>
                     <div style='font-size:0.9em; color:#555;'>가장 많이 느낀 감정</div>
                 </div>
@@ -635,7 +650,7 @@ def page_stats(sh):
 
 def page_happy_storage(sh):
     st.markdown("## 📂 행복 저장소")
-    st.markdown("내가 **'기쁨'**을 느꼈던 순간들만 모아봤어요. 🥰")
+    st.markdown("내가 **'기쁨'**을 느꼈던 순간들만 모아봤어요. 🥰") # ⭐️ 마크다운 기호 제거 완료
     my_diaries = get_user_diaries(sh, st.session_state.username)
     happy_moments = {date: data for date, data in my_diaries.items() if data['emotion'] == '기쁨'}
     
