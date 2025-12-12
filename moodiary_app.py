@@ -40,9 +40,10 @@ EMOTION_META = {
 
 KST = timezone(timedelta(hours=9))
 
+# ⭐️ [레이아웃 설정] 사이드바 공간 확보
 st.set_page_config(layout="wide", page_title="MOODIARY", page_icon="💖")
 
-# ⭐️ 커스텀 CSS (st.radio를 메뉴처럼 보이도록 스타일링)
+# ⭐️ 커스텀 CSS
 def apply_custom_css():
     st.markdown("""
         <style>
@@ -75,7 +76,7 @@ def apply_custom_css():
             max-width: 1000px;
         }
         
-        /* 4. 버튼 스타일 (메인) */
+        /* 4. 버튼 스타일 */
         .stButton > button {
             width: 100%; border-radius: 20px; border: none;
             background: linear-gradient(90deg, #6C5CE7 0%, #a29bfe 100%);
@@ -87,31 +88,15 @@ def apply_custom_css():
             filter: brightness(1.1); color: white;
         }
 
-        /* 5. ⭐️ 사이드바 메뉴 (st.radio를 메뉴처럼) ⭐️ */
-        section[data-testid="stSidebar"] .stRadio > div[role="radiogroup"] {
-            border: none; padding: 0; gap: 5px;
+        /* 5. ⭐️ 사이드바 메뉴 버튼 (안정화) */
+        section[data-testid="stSidebar"] .stButton > button {
+            background: none; color: #333; text-align: left; padding: 10px 0;
+            margin-bottom: 5px; font-weight: 600; box-shadow: none; border-radius: 0;
+            font-size: 1rem;
         }
-        section[data-testid="stSidebar"] .stRadio > div[role="radiogroup"] label {
-            background: #f8f9fa; border-radius: 8px; padding: 10px 15px;
-            margin-bottom: 5px; transition: background-color 0.1s;
+        section[data-testid="stSidebar"] .stButton > button:hover {
+            color: #6C5CE7; background: none; transform: none;
         }
-        section[data-testid="stSidebar"] .stRadio > div[role="radiogroup"] label:hover {
-            background: #eee;
-        }
-        /* 선택된 메뉴 강조 */
-        section[data-testid="stSidebar"] .stRadio > div[role="radiogroup"] label[data-checked='true'] {
-            background: #6C5CE7;
-            color: white !important;
-            font-weight: 700;
-        }
-        section[data-testid="stSidebar"] .stRadio > div[role="radiogroup"] label[data-checked='true'] p {
-            color: white !important;
-        }
-        /* 라디오 버튼 원 숨기기 */
-        section[data-testid="stSidebar"] .stRadio > div[role="radiogroup"] label span:first-child {
-            display: none !important;
-        }
-
 
         /* 6. 행복 저장소 카드 */
         .happy-card {
@@ -142,8 +127,7 @@ def apply_custom_css():
             margin-bottom: 0;
         }
 
-        header {visibility: hidden;}
-        footer {visibility: hidden;}
+        header {visibility: hidden;} footer {visibility: hidden;}
         </style>
     """, unsafe_allow_html=True)
 
@@ -329,7 +313,6 @@ def intro_page():
 def login_page():
     sh = init_db()
     
-    # ⭐️ [레이아웃] 로그인/문구 크기 맞춰서 조정
     c1, c2 = st.columns([0.6, 0.4])
 
     with c1:
@@ -390,7 +373,7 @@ def main_app():
         st.markdown(f"### 👋 **{st.session_state.username}**님")
         st.write("")
         
-        # ⭐️ [목차 복구 및 안정화]
+        # ⭐️ [목차 복구] 안정적인 st.button으로 구현
         if st.button("📝 일기 작성", use_container_width=True, key="sb_write"): st.session_state.page = "write"; st.rerun()
         if st.button("📅 감정 달력", use_container_width=True, key="sb_calendar"): st.session_state.page = "dashboard"; st.rerun()
         if st.button("🎵 음악/영화 추천", use_container_width=True, key="sb_recommend"): st.session_state.page = "result"; st.rerun()
@@ -511,4 +494,145 @@ def page_recommend(sh):
             if item.get('id'): components.iframe(f"https://open.spotify.com/embed/track/{item['id']}", height=250, width="100%")
     with c2:
         st.markdown("#### 🎬 추천 영화")
-        if st
+        if st.button("🔄 영화 새로고침", use_container_width=True, key="movie_refresh"):
+            st.session_state.movie_recs = recommend_movies(emo)
+            st.rerun()
+        for item in st.session_state.get('movie_recs', []):
+            if item.get('poster'):
+                ic, tc = st.columns([1, 2])
+                ic.image(item['poster'], use_container_width=True)
+                tc.markdown(f"**{item['title']} ({item['year']})**\n⭐ {item['rating']}\n\n*{item.get('overview','')}*")
+
+    st.divider()
+    b1, b2, b3 = st.columns(3)
+    with b1:
+        if st.button("📅 달력 보기", use_container_width=True, key="rec_cal"): st.session_state.page = "dashboard"; st.rerun()
+    with b2:
+        if st.button("📊 통계 보기", use_container_width=True, key="rec_stat"): st.session_state.page = "stats"; st.rerun()
+    with b3:
+        if st.button("📂 행복 저장소", use_container_width=True, key="rec_happy"): st.session_state.page = "happy"; st.rerun()
+
+def page_stats(sh):
+    st.markdown("## 📊 나의 감정 통계")
+    
+    if "stats_year" not in st.session_state:
+        now = datetime.now(KST)
+        st.session_state.stats_year = now.year
+        st.session_state.stats_month = now.month
+
+    c1, c2, c3 = st.columns([0.2, 0.6, 0.2])
+    with c1:
+        if st.button("◀️", use_container_width=True, key="prev_stats"):
+            if st.session_state.stats_month == 1:
+                st.session_state.stats_year -= 1
+                st.session_state.stats_month = 12
+            else: st.session_state.stats_month -= 1
+            st.rerun()
+    with c2:
+        st.markdown(f"<h3 style='text-align: center; margin:0; color: #333;'>{st.session_state.stats_year}년 {st.session_state.stats_month}월</h3>", unsafe_allow_html=True)
+    with c3:
+        if st.button("▶️", use_container_width=True, key="next_stats"):
+            if st.session_state.stats_month == 12:
+                st.session_state.stats_year += 1
+                st.session_state.stats_month = 1
+            else: st.session_state.stats_month += 1
+            st.rerun()
+    st.write("")
+
+    my_diaries = get_user_diaries(sh, st.session_state.username)
+    target_prefix = f"{st.session_state.stats_year}-{st.session_state.stats_month:02d}"
+    
+    month_data = []
+    for date, d in my_diaries.items():
+        if date.startswith(target_prefix):
+            e = d['emotion']
+            if e in EMOTION_META: month_data.append(e)
+    
+    df = pd.DataFrame(month_data, columns=['emotion'])
+    counts = df['emotion'].value_counts().reindex(EMOTION_META.keys(), fill_value=0)
+    
+    chart_data = counts.reset_index()
+    chart_data.columns = ['emotion', 'count']
+    domain = list(EMOTION_META.keys())
+    range_ = [m['color'].replace('0.6', '1.0').replace('0.5', '1.0') for m in EMOTION_META.values()] 
+    
+    if month_data:
+        max_val = int(chart_data['count'].max()) if not chart_data.empty else 5
+        y_values = list(range(0, max_val + 2))
+        most_common_emo = max(set(month_data), key=month_data.count)
+        total_count = len(month_data)
+
+        sc1, sc2 = st.columns(2)
+        sc1.markdown(f"""<div class='stat-card'><div class='stat-value'>{total_count}개</div><div class='stat-label'>총 기록 수</div></div>""", unsafe_allow_html=True)
+        sc2.markdown(f"""<div class='stat-card'><div class='stat-value'>{EMOTION_META[most_common_emo]['emoji']} {most_common_emo}</div><div class='stat-label'>가장 많이 느낀 감정</div></div>""", unsafe_allow_html=True)
+        st.write("")
+        
+        st.vega_lite_chart(chart_data, {
+            "mark": {"type": "bar", "cornerRadius": 10},
+            "encoding": {
+                "x": {
+                    "field": "emotion", "type": "nominal", "sort": domain, 
+                    "axis": {"labelAngle": 0, "labelFontSize": 12}, "title": "감정"
+                },
+                "y": {
+                    "field": "count", "type": "quantitative", 
+                    "axis": {"values": y_values, "format": "d", "titleAngle": 0, "titleAlign": "right", "titleY": -10}, 
+                    "scale": {"domainMin": 0}, "title": "횟수"
+                },
+                "color": {"field": "emotion", "scale": {"domain": domain, "range": range_}, "legend": None},
+                "tooltip": [{"field": "emotion"}, {"field": "count"}]
+            }
+        }, use_container_width=True)
+    else:
+        st.info("이 달에는 작성된 일기가 없습니다.")
+
+    st.divider()
+    b1, b2 = st.columns(2)
+    with b1:
+        if st.button("📅 달력 보기", use_container_width=True, key="stats_cal"): st.session_state.page = "dashboard"; st.rerun()
+    with b2:
+        if st.button("📂 행복 저장소 보러가기", use_container_width=True, key="stats_happy"): st.session_state.page = "happy"; st.rerun()
+
+def page_happy_storage(sh):
+    st.markdown("## 📂 행복 저장소")
+    st.markdown("내가 **'기쁨'**을 느꼈던 순간들만 모아봤어요. 🥰")
+    my_diaries = get_user_diaries(sh, st.session_state.username)
+    happy_moments = {date: data for date, data in my_diaries.items() if data['emotion'] == '기쁨'}
+    
+    if not happy_moments:
+        st.info("아직 기록된 기쁨의 순간이 없어요.")
+    else:
+        dates = sorted(happy_moments.keys(), reverse=True)
+        for i in range(0, len(dates), 2):
+            cols = st.columns(2)
+            date1 = dates[i]
+            data1 = happy_moments[date1]
+            with cols[0]:
+                st.markdown(f"""
+                <div class="happy-card">
+                    <div class="happy-date">{date1} {EMOTION_META['기쁨']['emoji']}</div>
+                    <div class="happy-text">{data1['text']}</div>
+                </div>
+                """, unsafe_allow_html=True)
+            
+            if i + 1 < len(dates):
+                date2 = dates[i+1]
+                data2 = happy_moments[date2]
+                with cols[1]:
+                    st.markdown(f"""
+                    <div class="happy-card">
+                        <div class="happy-date">{date2} {EMOTION_META['기쁨']['emoji']}</div>
+                        <div class="happy-text">{data2['text']}</div>
+                    </div>
+                    """, unsafe_allow_html=True)
+
+    st.divider()
+    b1, b2 = st.columns(2)
+    with b1:
+        if st.button("📅 달력 보기", use_container_width=True, key="happy_cal"): st.session_state.page = "dashboard"; st.rerun()
+    with b2:
+        if st.button("📊 통계 보러가기", use_container_width=True, key="happy_stats"): st.session_state.page = "stats"; st.rerun()
+
+if st.session_state.logged_in: main_app()
+elif st.session_state.page == "intro": intro_page()
+else: login_page()
