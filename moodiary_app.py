@@ -54,13 +54,13 @@ def apply_custom_css():
         bg_end = "#403A4E"
         
         main_bg = "rgba(40, 40, 40, 0.9)"
-        main_text = "#f0f0f0"       # ⭐️ 기본 텍스트 (흰색)
-        secondary_text = "#bbbbbb"  # ⭐️ 보조 텍스트 (연한 회색)
+        main_text = "#f0f0f0"       
+        secondary_text = "#bbbbbb"  
         sidebar_bg = "#1e1e1e"
         menu_checked = "#A29BFE"
-        card_bg = "#3a3a3a"         # 어두운 행복 저장소 배경
-        card_text_happy = "#ffffff" # 행복 저장소 텍스트 (흰색)
-        stat_card_line = "1px solid #444444" # 통계 구분선
+        card_bg = "#3a3a3a"         
+        card_text_happy = "#ffffff" 
+        stat_card_line = "1px solid #444444" 
     else:
         # 주간 모드 색상
         bg_start = "#ee7752"
@@ -135,7 +135,7 @@ def apply_custom_css():
             color: {menu_checked}; background: none; transform: none;
         }}
 
-        /* 7. ⭐️ 행복 저장소 카드 (디자인 개선 및 가시성) */
+        /* 7. 행복 저장소 카드 (디자인 개선 및 가시성) */
         .happy-card {{
             background: {card_bg}; border-left: 6px solid #FFD700;
             padding: 25px; border-radius: 20px; box-shadow: 0 4px 10px rgba(0,0,0,0.1);
@@ -143,12 +143,9 @@ def apply_custom_css():
             height: auto;
         }}
         .happy-date {{ color: {main_text}; font-weight: 700; margin-bottom: 12px; }}
-        .happy-text {{ 
-            font-size: 1.4em; font-weight: 600; line-height: 1.5; 
-            color: {card_text_happy}; /* 대비 확보 */
-        }}
+        .happy-text {{ font-size: 1.4em; font-weight: 600; line-height: 1.5; color: {card_text_happy}; }}
 
-        /* 8. ⭐️ 통계 요약 카드 (선/배경 제거) */
+        /* 8. 통계 요약 카드 (선/배경 제거) */
         .stat-card {{
             background: transparent;
             box-shadow: none;
@@ -493,9 +490,9 @@ def page_dashboard(sh):
              custom_css="""
              .fc-event-title { font-size: 3em !important; display: flex; justify-content: center; align-items: center; height: 100%; transform: translateY(-25px); text-shadow: 1px 1px 2px rgba(0,0,0,0.2); }
              .fc-daygrid-event { border: none !important; background-color: transparent !important; }
-             .fc-daygrid-day-number { z-index: 10 !important; color: var(--main-text-color, black); font-weight: bold; } /* 달력 숫자 색상 */
+             .fc-daygrid-day-number { z-index: 10 !important; color: var(--main-text-color, black); font-weight: bold; }
              .fc-bg-event { opacity: 1.0 !important; }
-             .fc-col-header-cell-cushion { color: var(--main-text-color, #333); font-weight: bold; } /* 요일 색상 */
+             .fc-col-header-cell-cushion { color: var(--main-text-color, #333); font-weight: bold; }
              """
              )
     
@@ -590,7 +587,9 @@ def page_stats(sh):
             else: st.session_state.stats_month -= 1
             st.rerun()
     with c2:
-        st.markdown(f"<h3 style='text-align: center; margin:0; color: #333;'>{st.session_state.stats_year}년 {st.session_state.stats_month}월</h3>", unsafe_allow_html=True)
+        # ⭐️ 월/연도 텍스트 색상 직접 지정 (가시성 확보)
+        text_color = "#f0f0f0" if st.session_state.get("dark_mode", False) else "#333"
+        st.markdown(f"<h3 style='text-align: center; margin:0; color: {text_color};'>{st.session_state.stats_year}년 {st.session_state.stats_month}월</h3>", unsafe_allow_html=True)
     with c3:
         if st.button("▶️", use_container_width=True, key="next_stats"):
             if st.session_state.stats_month == 12:
@@ -623,16 +622,19 @@ def page_stats(sh):
         most_common_emo = max(set(month_data), key=month_data.count)
         total_count = len(month_data)
 
-        # ⭐️ 통계 요약 배경 제거 적용
+        # ⭐️ 통계 요약 배경 제거 및 가시성 확보
+        stat_label_color = "#555" if not st.session_state.dark_mode else "#bbbbbb"
+        stat_divider_color = "rgba(128,128,128,0.3)" if not st.session_state.dark_mode else "#444444"
+
         st.markdown(f"""
             <div style='display:flex; justify-content:space-around; text-align:center;'>
-                <div class='stat-card' style='flex:1; border-right: 1px solid {('rgba(128,128,128,0.3)' if not st.session_state.dark_mode else '#444444')};'>
+                <div class='stat-card' style='flex:1; border-right: 1px solid {stat_divider_color};'>
                     <div style='font-size:1.8em; font-weight:700; color:#6C5CE7;'>{total_count}개</div>
-                    <div style='font-size:0.9em; color:{'#555' if not st.session_state.dark_mode else '#bbbbbb'};'>총 기록 수</div>
+                    <div style='font-size:0.9em; color:{stat_label_color};'>총 기록 수</div>
                 </div>
                 <div class='stat-card' style='flex:1; margin-left: 10px;'>
                     <div style='font-size:1.8em; font-weight:700; color:{EMOTION_META[most_common_emo]['color'].replace('0.6', '1.0')}'>{EMOTION_META[most_common_emo]['emoji']} {most_common_emo}</div>
-                    <div style='font-size:0.9em; color:{'#555' if not st.session_state.dark_mode else '#bbbbbb'};'>가장 많이 느낀 감정</div>
+                    <div style='font-size:0.9em; color:{stat_label_color};'>가장 많이 느낀 감정</div>
                 </div>
             </div>
             <br>
@@ -666,7 +668,7 @@ def page_stats(sh):
 
 def page_happy_storage(sh):
     st.markdown("## 📂 행복 저장소")
-    # ⭐️ 마크다운 기호 완전히 제거 및 텍스트 색상 확보
+    # ⭐️ 마크다운 기호 제거 및 텍스트 색상 확보
     text_color = "#555" if not st.session_state.dark_mode else "#bbbbbb"
     st.markdown(f"<p style='color:{text_color};'>내가 '기쁨'을 느꼈던 순간들만 모아봤어요. 🥰</p>", unsafe_allow_html=True)
     
@@ -678,7 +680,7 @@ def page_happy_storage(sh):
     else:
         dates = sorted(happy_moments.keys(), reverse=True)
         for i in range(0, len(dates), 2):
-            cols = st.columns(2, gap="large") # ⭐️ 겹침 방지를 위해 간격 확보
+            cols = st.columns(2, gap="large") # ⭐️ 겹침 방지 간격 유지
             date1 = dates[i]
             data1 = happy_moments[date1]
             with cols[0]:
