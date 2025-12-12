@@ -42,7 +42,7 @@ KST = timezone(timedelta(hours=9))
 
 st.set_page_config(layout="wide", page_title="MOODIARY", page_icon="💖")
 
-# ⭐️ 커스텀 CSS (Sidebar 안정화 및 폰트 통일)
+# ⭐️ 커스텀 CSS (Sidebar 폰트 크기 조정)
 def apply_custom_css():
     st.markdown("""
         <style>
@@ -87,10 +87,12 @@ def apply_custom_css():
             filter: brightness(1.1); color: white;
         }
 
-        /* 5. 사이드바 메뉴 버튼 (안정화) */
+        /* 5. ⭐️ 사이드바 메뉴 버튼 (안정화 + 폰트 크기 조정) */
         section[data-testid="stSidebar"] .stButton > button {
             background: none; color: #333; text-align: left; padding: 10px 0;
-            font-weight: 600; box-shadow: none; border-radius: 0;
+            margin-bottom: 5px; font-weight: 600; box-shadow: none; border-radius: 0;
+            font-size: 0.95rem; /* ⭐️ 폰트 크기 줄임 */
+            line-height: 1.1; /* 한 줄에 표시되도록 간격 조정 */
         }
         section[data-testid="stSidebar"] .stButton > button:hover {
             color: #6C5CE7; background: none; transform: none;
@@ -110,8 +112,7 @@ def apply_custom_css():
             border: 1px solid rgba(255, 255, 255, 0.8);
         }
 
-        header {visibility: hidden;}
-        footer {visibility: hidden;}
+        header {visibility: hidden;} footer {visibility: hidden;}
         </style>
     """, unsafe_allow_html=True)
 
@@ -182,7 +183,7 @@ def add_diary(sh, username, date, emotion, text):
     except: return False
 
 # =========================================
-# 🧠 4) AI & 추천 로직 (생략)
+# 🧠 4) AI & 추천 로직
 # =========================================
 @st.cache_resource
 def load_emotion_model():
@@ -312,7 +313,7 @@ def login_page():
         tab1, tab2 = st.tabs(["🔑 로그인", "📝 회원가입"])
         
         if sh is None:
-            st.warning("⚠️ DB 연결 중...")
+            st.warning("⚠️ DB 연결 중입니다...")
             if st.button("🔄 새로고침"): st.rerun()
             return
 
@@ -357,7 +358,7 @@ def main_app():
         st.markdown(f"### 👋 **{st.session_state.username}**님")
         st.write("")
         
-        # ⭐️ [목차 복구] 안정적인 st.button으로 구현 (각 버튼이 명시적으로 페이지 상태를 변경)
+        # ⭐️ [목차 복구] 안정적인 st.button으로 구현
         if st.button("📝 일기 작성", use_container_width=True, key="sb_write"): st.session_state.page = "write"; st.rerun()
         if st.button("📅 감정 달력", use_container_width=True, key="sb_calendar"): st.session_state.page = "dashboard"; st.rerun()
         if st.button("🎵 음악/영화 추천", use_container_width=True, key="sb_recommend"): st.session_state.page = "result"; st.rerun()
@@ -481,7 +482,7 @@ def page_recommend(sh):
         if st.button("🔄 영화 새로고침", use_container_width=True, key="movie_refresh"):
             st.session_state.movie_recs = recommend_movies(emo)
             st.rerun()
-        for item in st.session_state.get("movie_recs", []):
+        for item in st.session_state.get('movie_recs', []):
             if item.get('poster'):
                 ic, tc = st.columns([1, 2])
                 ic.image(item['poster'], use_container_width=True)
