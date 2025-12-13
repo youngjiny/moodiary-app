@@ -45,7 +45,7 @@ st.set_page_config(layout="wide", page_title="MOODIARY", page_icon="💖")
 # ⭐️ 페이지 이동 함수 (버튼 안정화 핵심)
 def set_page(page_name):
     st.session_state.page = page_name
-    st.rerun() # ⭐️ 명시적 리런 호출 추가
+    st.rerun() # ⭐️ 명시적 리런 호출
 
 # ⭐️ 커스텀 CSS (야간 모드 CSS 조건부 렌더링)
 def apply_custom_css():
@@ -400,7 +400,7 @@ def login_page():
                     st.session_state.page = "dashboard" if today_str in diaries else "write"
                 else: 
                     st.error("아이디/비밀번호 오류")
-                st.rerun() # 명시적 리런
+                st.rerun() # ⭐️ 명시적 리런 호출
             
             if st.button("로그인", use_container_width=True, on_click=attempt_login, key="login_btn"):
                 pass
@@ -416,7 +416,7 @@ def login_page():
                 else:
                     if add_user(sh, nid, npw): st.success("가입 성공! 로그인하세요.")
                     else: st.error("가입 실패")
-                st.rerun() # 명시적 리런
+                st.rerun() # ⭐️ 명시적 리런 호출
             
             if st.button("가입하기", use_container_width=True, on_click=attempt_signup, key="signup_btn"):
                  pass
@@ -459,12 +459,13 @@ def main_app():
             "📂 행복 저장소": "happy"
         }
         
+        # st.session_state.page의 현재 값을 기준으로 인덱스를 찾습니다.
         current_page_key = next((k for k, v in PAGE_MAP.items() if v == st.session_state.page), list(PAGE_MAP.keys())[0])
         idx = list(PAGE_MAP.keys()).index(current_page_key)
         
-        # st.radio를 사용 (안정적인 메뉴 구현)
         selected = st.radio("목차", list(PAGE_MAP.keys()), index=idx, key="sidebar_menu_radio")
         
+        # st.radio는 자체적으로 상태를 변경하므로, 변경된 경우에만 페이지 이동
         if PAGE_MAP[selected] != st.session_state.page:
             st.session_state.page = PAGE_MAP[selected]
             st.rerun()
@@ -472,7 +473,6 @@ def main_app():
         st.divider()
         if st.button("🚪 로그아웃", use_container_width=True, on_click=set_page, args=("intro",)):
             st.session_state.logged_in = False
-            # on_click에서 상태 변경 및 rerun 처리됨
 
     # --- 라우팅 ---
     if st.session_state.page == "write": page_write(sh)
