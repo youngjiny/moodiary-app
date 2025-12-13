@@ -44,8 +44,9 @@ st.set_page_config(layout="wide", page_title="MOODIARY", page_icon="💖")
 
 # ⭐️ 페이지 이동 함수 (버튼 안정화 핵심)
 def set_page(page_name):
+    """세션 상태를 변경하고 페이지를 새로고침하여 이동을 강제합니다."""
     st.session_state.page = page_name
-    st.rerun() # ⭐️ 명시적 리런 호출
+    st.rerun() 
 
 # ⭐️ 커스텀 CSS (야간 모드 CSS 조건부 렌더링)
 def apply_custom_css():
@@ -358,6 +359,7 @@ def intro_page():
                 <br>
             </div>
         """, unsafe_allow_html=True)
+        
         # ⭐️ 버튼 클릭 시 set_page 함수 호출
         if st.button("✨ 내 마음 기록하러 가기", use_container_width=True, on_click=set_page, args=("login",), key="intro_start"):
             pass
@@ -465,7 +467,6 @@ def main_app():
         
         selected = st.radio("목차", list(PAGE_MAP.keys()), index=idx, key="sidebar_menu_radio")
         
-        # st.radio는 자체적으로 상태를 변경하므로, 변경된 경우에만 페이지 이동
         if PAGE_MAP[selected] != st.session_state.page:
             st.session_state.page = PAGE_MAP[selected]
             st.rerun()
@@ -511,7 +512,7 @@ def page_write(sh):
             today = datetime.now(KST).strftime("%Y-%m-%d")
             add_diary(sh, st.session_state.username, today, emo, txt)
             st.session_state.page = "result"
-            st.rerun()
+            st.rerun() # ⭐️ 페이지 이동을 위해 명시적 리런
 
 def page_dashboard(sh):
     st.markdown("## 📅 감정 달력")
@@ -562,7 +563,7 @@ def page_dashboard(sh):
             pass
     else:
         if st.button("✏️ 오늘의 일기 쓰러 가기", type="primary", use_container_width=True, on_click=set_page, args=("write",), key="dash_write"):
-            st.session_state.diary_input = ""
+            st.session_state.diary_input = "" # 새로운 일기 작성 시 기존 입력값 초기화
 
 def page_recommend(sh):
     st.markdown("## 🎵 음악/영화 추천")
@@ -588,16 +589,14 @@ def page_recommend(sh):
     c1, c2 = st.columns(2)
     with c1:
         st.markdown("#### 🎵 추천 음악")
-        if st.button("🔄 음악 새로고침", use_container_width=True, key="music_refresh"):
-            st.session_state.music_recs = recommend_music(emo)
-            st.rerun()
+        if st.button("🔄 음악 새로고침", use_container_width=True, on_click=st.rerun, key="music_refresh"):
+            pass # 새로고침 버튼은 별도의 로직 없이 rerun만 필요
         for item in st.session_state.get("music_recs", []):
             if item.get('id'): components.iframe(f"https://open.spotify.com/embed/track/{item['id']}", height=250, width="100%")
     with c2:
         st.markdown("#### 🎬 추천 영화")
-        if st.button("🔄 영화 새로고침", use_container_width=True, key="movie_refresh"):
-            st.session_state.movie_recs = recommend_movies(emo)
-            st.rerun()
+        if st.button("🔄 영화 새로고침", use_container_width=True, on_click=st.rerun, key="movie_refresh"):
+            pass # 새로고침 버튼은 별도의 로직 없이 rerun만 필요
         for item in st.session_state.get('movie_recs', []):
             if item.get('poster'):
                 ic, tc = st.columns([1, 2])
@@ -625,14 +624,14 @@ def page_stats(sh):
             st.session_state.stats_year -= 1
             st.session_state.stats_month = 12
         else: st.session_state.stats_month -= 1
-        st.rerun()
+        st.rerun() # 명시적 리런
     
     def next_month():
         if st.session_state.stats_month == 12:
             st.session_state.stats_year += 1
             st.session_state.stats_month = 1
         else: st.session_state.stats_month += 1
-        st.rerun()
+        st.rerun() # 명시적 리런
 
     if c1.button("◀️", use_container_width=True, on_click=prev_month, key="prev_stats"): pass
     
