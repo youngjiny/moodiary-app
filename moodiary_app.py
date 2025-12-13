@@ -42,11 +42,10 @@ KST = timezone(timedelta(hours=9))
 
 st.set_page_config(layout="wide", page_title="MOODIARY", page_icon="💖")
 
-# ⭐️ 페이지 이동 함수 (버튼 안정화 핵심)
+# ⭐️ 페이지 이동 함수 (st.rerun()은 호출하지 않고 상태만 변경)
 def set_page(page_name):
-    """세션 상태를 변경하고 페이지를 새로고침하여 이동을 강제합니다."""
+    """세션 상태만 변경하고, 메인 루프에서 st.rerun()을 처리하도록 합니다."""
     st.session_state.page = page_name
-    st.rerun() 
 
 # ⭐️ 커스텀 CSS (야간 모드 CSS 조건부 렌더링)
 def apply_custom_css():
@@ -130,7 +129,15 @@ def apply_custom_css():
         }}
         .stButton > button:hover {{ transform: translateY(-2px); filter: brightness(1.1); }}
 
-        /* 6. ⭐️ 사이드바 메뉴 (st.radio를 메뉴처럼) ⭐️ */
+        /* 6. 사이드바 메뉴 버튼 (안정화) */
+        section[data-testid="stSidebar"] .stButton > button {{
+            color: {main_text}; background: none; font-weight: 600;
+        }}
+        section[data-testid="stSidebar"] .stButton > button:hover {{
+            color: {menu_checked}; background: none; transform: none;
+        }}
+
+        /* 7. ⭐️ 사이드바 메뉴 (st.radio를 메뉴처럼) ⭐️ */
         section[data-testid="stSidebar"] .stRadio > div[role="radiogroup"] {{
             border: none; padding: 0; gap: 5px;
         }}
@@ -155,7 +162,7 @@ def apply_custom_css():
             display: none !important;
         }}
 
-        /* 7. 행복 저장소 카드 */
+        /* 8. 행복 저장소 카드 */
         .happy-card {{
             background: {card_bg}; border-left: 6px solid #FFD700;
             padding: 25px; border-radius: 20px; margin-bottom: 15px;
@@ -164,13 +171,13 @@ def apply_custom_css():
         .happy-date {{ color: {main_text}; font-weight: 700; margin-bottom: 12px; }}
         .happy-text {{ font-size: 1.4em; font-weight: 600; line-height: 1.5; color: {card_text_happy}; }}
 
-        /* 8. 통계 요약 카드 */
+        /* 9. 통계 요약 카드 */
         .stat-card {{
             background: transparent; box-shadow: none; padding: 10px 0; border: none; text-align: center;
         }}
         .stat-card:first-child {{ border-right: {stat_card_line}; }} 
         
-        /* 9. MOODIARY 텍스트 색상 애니메이션 */
+        /* 10. MOODIARY 텍스트 색상 애니메이션 */
         @keyframes color-shift {{
             0% {{ color: #6C5CE7; }}
             33% {{ color: #FF7675; }}
@@ -401,7 +408,7 @@ def login_page():
                     st.session_state.page = "dashboard" if today_str in diaries else "write"
                 else: 
                     st.error("아이디/비밀번호 오류")
-                st.rerun() # ⭐️ 명시적 리런 호출
+                st.rerun() 
             
             if st.button("로그인", use_container_width=True, on_click=attempt_login, key="login_btn"):
                 pass
@@ -417,7 +424,7 @@ def login_page():
                 else:
                     if add_user(sh, nid, npw): st.success("가입 성공! 로그인하세요.")
                     else: st.error("가입 실패")
-                st.rerun() # ⭐️ 명시적 리런 호출
+                st.rerun()
             
             if st.button("가입하기", use_container_width=True, on_click=attempt_signup, key="signup_btn"):
                  pass
@@ -470,7 +477,6 @@ def main_app():
             st.rerun() # ⭐️ 메뉴 이동 시 명시적 리런
 
         st.divider()
-        # ⭐️ on_click에서 set_page 호출
         if st.button("🚪 로그아웃", use_container_width=True, on_click=set_page, args=("intro",)):
             st.session_state.logged_in = False
 
@@ -618,24 +624,23 @@ def page_stats(sh):
         st.session_state.stats_year = now.year
         st.session_state.stats_month = now.month
 
-    # ⭐️ 버튼 UI 충돌 방지를 위해 st.columns 대신 간결한 레이아웃 사용
-    st.write("<br>", unsafe_allow_html=True)
+    # ⭐️ UI 뒤틀림 방지를 위해 월 이동 버튼 로직 단순화
     
     def prev_month():
         if st.session_state.stats_month == 1:
             st.session_state.stats_year -= 1
             st.session_state.stats_month = 12
         else: st.session_state.stats_month -= 1
-        st.rerun() # 명시적 리런
+        st.rerun() 
     
     def next_month():
         if st.session_state.stats_month == 12:
             st.session_state.stats_year += 1
             st.session_state.stats_month = 1
         else: st.session_state.stats_month += 1
-        st.rerun() # 명시적 리런
+        st.rerun() 
 
-    # ⭐️ 월 이동 버튼 영역 (UI 뒤틀림 방지)
+    # ⭐️ 월 이동 버튼 영역
     col_prev, col_title, col_next = st.columns([1, 3, 1])
     
     if col_prev.button("◀️", use_container_width=True, on_click=prev_month, key="prev_stats"): pass
