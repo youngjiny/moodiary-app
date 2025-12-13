@@ -45,7 +45,7 @@ st.set_page_config(layout="wide", page_title="MOODIARY", page_icon="💖")
 # ⭐️ 페이지 이동 함수 (버튼 안정화 핵심)
 def set_page(page_name):
     st.session_state.page = page_name
-    # st.rerun()은 호출하는 측에서 명시적으로 처리하도록 유지
+    st.rerun() # ⭐️ 명시적 리런 호출 추가
 
 # ⭐️ 커스텀 CSS (야간 모드 CSS 조건부 렌더링)
 def apply_custom_css():
@@ -460,21 +460,19 @@ def main_app():
         }
         
         current_page_key = next((k for k, v in PAGE_MAP.items() if v == st.session_state.page), list(PAGE_MAP.keys())[0])
-        
-        # st.radio 대신 st.button으로 재구성 (on_click으로 안정성 확보 시도)
-        
-        # ⭐️ 안정성을 위해 st.radio를 사용하고 CSS로 메뉴처럼 꾸밈
         idx = list(PAGE_MAP.keys()).index(current_page_key)
+        
+        # st.radio를 사용 (안정적인 메뉴 구현)
         selected = st.radio("목차", list(PAGE_MAP.keys()), index=idx, key="sidebar_menu_radio")
         
         if PAGE_MAP[selected] != st.session_state.page:
             st.session_state.page = PAGE_MAP[selected]
             st.rerun()
-            
+
         st.divider()
         if st.button("🚪 로그아웃", use_container_width=True, on_click=set_page, args=("intro",)):
             st.session_state.logged_in = False
-            # on_click으로 상태 변경 및 rerun 처리됨
+            # on_click에서 상태 변경 및 rerun 처리됨
 
     # --- 라우팅 ---
     if st.session_state.page == "write": page_write(sh)
@@ -725,7 +723,7 @@ def page_happy_storage(sh):
     else:
         dates = sorted(happy_moments.keys(), reverse=True)
         for i in range(0, len(dates), 2):
-            cols = st.columns(2, gap="large") 
+            cols = st.columns(2, gap="large") # 겹침 방지 간격 유지
             date1 = dates[i]
             data1 = happy_moments[date1]
             with cols[0]:
