@@ -42,11 +42,9 @@ KST = timezone(timedelta(hours=9))
 
 st.set_page_config(layout="wide", page_title="MOODIARY", page_icon="💖")
 
-# ⭐️ 페이지 이동 함수 (st.rerun() 추가)
-def set_page(page_name):
-    """세션 상태를 변경하고, 변경된 상태를 바탕으로 화면을 갱신합니다."""
-    st.session_state.page = page_name
-    st.rerun() # <-- 수정된 부분
+# ⭐️ 페이지 이동 함수 (st.rerun()을 포함하여 모든 버튼이 작동하도록 재정의)
+# 이전 코드는 set_page가 on_click에만 사용되었으나, 이번에는 사용하지 않고
+# 모든 버튼 클릭 이벤트 내에서 상태 변경 후 st.rerun()을 명시적으로 호출합니다.
 
 # ⭐️ 커스텀 CSS (야간 모드 CSS 조건부 렌더링)
 def apply_custom_css():
@@ -54,12 +52,13 @@ def apply_custom_css():
     is_dark = st.session_state.get("dark_mode", False)
     
     if is_dark:
+        # 야간 모드 색상
         bg_start = "#121212"
         bg_mid = "#2c2c2c"
         bg_end = "#403A4E"
         
         main_bg = "rgba(40, 40, 40, 0.9)"
-        main_text = "#f0f0f0"        
+        main_text = "#f0f0f0"       
         secondary_text = "#bbbbbb"  
         sidebar_bg = "#1e1e1e"
         menu_checked = "#A29BFE"
@@ -67,6 +66,7 @@ def apply_custom_css():
         card_text_happy = "#ffffff" 
         stat_card_line = "1px solid #444444" 
     else:
+        # 주간 모드 색상
         bg_start = "#ee7752"
         bg_mid = "#e73c7e"
         bg_end = "#23d5ab"
@@ -111,13 +111,14 @@ def apply_custom_css():
             max-width: 1000px;
         }}
         
-        /* 4. 텍스트 가시성 확보 */
+        /* 4. ⭐️ 텍스트 가시성 확보 */
         p, label, .stMarkdown, .stTextarea, .stTextInput, .stCheckbox, [data-testid^="stBlock"] {{ color: {main_text} !important; }}
         section[data-testid="stSidebar"] * {{ color: {main_text} !important; }}
         section[data-testid="stSidebar"] {{ background-color: {sidebar_bg} !important; }}
         
         /* 감정 설명 문구 (조마조마해요 등) */
         .stMarkdown h4 {{ color: {secondary_text} !important; }} 
+        /* 입력창 힌트 텍스트 가시성 보장 */
         .stTextInput, .stTextarea {{ color: {secondary_text} !important; }}
 
 
@@ -138,47 +139,28 @@ def apply_custom_css():
             color: {menu_checked}; background: none; transform: none;
         }}
 
-        /* 7. ⭐️ 사이드바 메뉴 (st.radio를 메뉴처럼) ⭐️ */
-        section[data-testid="stSidebar"] .stRadio > div[role="radiogroup"] {{
-            border: none; padding: 0; gap: 5px;
-        }}
-        section[data-testid="stSidebar"] .stRadio > div[role="radiogroup"] label {{
-            background: {sidebar_bg}; border-radius: 8px; padding: 10px 15px;
-            margin-bottom: 5px; transition: background-color 0.1s;
-        }}
-        section[data-testid="stSidebar"] .stRadio > div[role="radiogroup"] label:hover {{
-            background: #eee;
-        }}
-        /* 선택된 메뉴 강조 */
-        section[data-testid="stSidebar"] .stRadio > div[role="radiogroup"] label[data-checked='true'] {{
-            background: {menu_checked};
-            color: white !important;
-            font-weight: 700;
-        }}
-        section[data-testid="stSidebar"] .stRadio > div[role="radiogroup"] label[data-checked='true'] p {{
-            color: white !important;
-        }}
-        /* 라디오 버튼 원 숨기기 */
-        section[data-testid="stSidebar"] .stRadio > div[role="radiogroup"] label span:first-child {{
-            display: none !important;
-        }}
-
-        /* 8. 행복 저장소 카드 */
+        /* 7. ⭐️ 행복 저장소 카드 (디자인 개선 및 가시성) */
         .happy-card {{
             background: {card_bg}; border-left: 6px solid #FFD700;
-            padding: 25px; border-radius: 20px; margin-bottom: 15px;
-            box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+            padding: 25px; border-radius: 20px; box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+            margin-bottom: 15px;
+            height: auto;
         }}
         .happy-date {{ color: {main_text}; font-weight: 700; margin-bottom: 12px; }}
         .happy-text {{ font-size: 1.4em; font-weight: 600; line-height: 1.5; color: {card_text_happy}; }}
 
-        /* 9. 통계 요약 카드 */
+        /* 8. ⭐️ 통계 요약 카드 (선/배경 제거 및 가시성) */
         .stat-card {{
-            background: transparent; box-shadow: none; padding: 10px 0; border: none; text-align: center;
+            background: transparent;
+            box-shadow: none;
+            padding: 10px 0; 
+            border: none; 
+            text-align: center;
         }}
+        /* 통계 요약 카드 간 구분선 (수직선) */
         .stat-card:first-child {{ border-right: {stat_card_line}; }} 
         
-        /* 10. MOODIARY 텍스트 색상 애니메이션 */
+        /* 9. MOODIARY 텍스트 색상 애니메이션 */
         @keyframes color-shift {{
             0% {{ color: #6C5CE7; }}
             33% {{ color: #FF7675; }}
@@ -187,13 +169,13 @@ def apply_custom_css():
         }}
         .animated-title {{ font-size: 3.5rem !important; font-weight: 800; animation: color-shift 5s ease-in-out infinite alternate; }}
 
-        footer {{visibility: hidden;}}
+        header {{visibility: hidden;}} footer {{visibility: hidden;}}
         </style>
     """
     st.markdown(css, unsafe_allow_html=True)
 
 # =========================================
-# 🔐 3) 구글 시트 데이터베이스 (생략: 변경 없음)
+# 🔐 3) 구글 시트 데이터베이스 (수정 없음)
 # =========================================
 @st.cache_resource
 def get_gsheets_client():
@@ -259,7 +241,7 @@ def add_diary(sh, username, date, emotion, text):
     except: return False
 
 # =========================================
-# 🧠 4) AI & 추천 로직 (생략: 변경 없음)
+# 🧠 4) AI & 추천 로직 (수정 없음)
 # =========================================
 @st.cache_resource
 def load_emotion_model():
@@ -367,9 +349,10 @@ def intro_page():
                 <br>
             </div>
         """, unsafe_allow_html=True)
-        # set_page 내부에 st.rerun()이 있으므로 작동함.
-        if st.button("✨ 내 마음 기록하러 가기", use_container_width=True, on_click=set_page, args=("login",), key="intro_start"):
-            pass
+        # ⭐️ 버튼 클릭 시 상태 변경 및 rerun
+        if st.button("✨ 내 마음 기록하러 가기", use_container_width=True, key="intro_start"):
+            st.session_state.page = "login"
+            st.rerun()
 
 # 1. 로그인 페이지
 def login_page():
@@ -397,8 +380,8 @@ def login_page():
         with tab1:
             lid = st.text_input("아이디", key="lid")
             lpw = st.text_input("비밀번호", type="password", key="lpw")
-            
-            def attempt_login():
+            # ⭐️ 로그인 버튼: 상태 변경 및 rerun 명시
+            if st.button("로그인", use_container_width=True, key="login_btn"):
                 users = get_all_users(sh)
                 if str(lid) in users and str(users[str(lid)]) == str(lpw):
                     st.session_state.logged_in = True
@@ -406,29 +389,24 @@ def login_page():
                     
                     today_str = datetime.now(KST).strftime("%Y-%m-%d")
                     diaries = get_user_diaries(sh, lid)
-                    st.session_state.page = "dashboard" if today_str in diaries else "write"
+                    if today_str in diaries: st.session_state.page = "dashboard"
+                    else: st.session_state.page = "write"
+                    st.rerun() # ⭐️ 로그인 성공 시 reruN
                 else: 
                     st.error("아이디/비밀번호 오류")
-                st.rerun() # 로그인 시에도 reruN 필요
             
-            if st.button("로그인", use_container_width=True, on_click=attempt_login, key="login_btn"):
-                pass
-
         with tab2:
             nid = st.text_input("새 아이디", key="nid")
             npw = st.text_input("새 비밀번호 (4자리)", type="password", key="npw", max_chars=4)
-            
-            def attempt_signup():
+            # ⭐️ 가입 버튼: 상태 변경 및 rerun 명시
+            if st.button("가입하기", use_container_width=True, key="signup_btn"):
                 users = get_all_users(sh)
                 if str(nid) in users: st.error("이미 존재함")
                 elif len(nid)<1 or len(npw)!=4: st.error("형식 확인 (비번 4자리)")
                 else:
                     if add_user(sh, nid, npw): st.success("가입 성공! 로그인하세요.")
                     else: st.error("가입 실패")
-                st.rerun() # 가입 후에도 reruN 필요
-            
-            if st.button("가입하기", use_container_width=True, on_click=attempt_signup, key="signup_btn"):
-                    pass
+                st.rerun() # ⭐️ 가입 시도 후 reruN
         st.markdown("</div>", unsafe_allow_html=True)
 
 # 2. 메인 앱
@@ -459,28 +437,18 @@ def main_app():
 
         st.divider()
         
-        # ⭐️ [목차] st.radio를 사용하여 안정적으로 구현
-        PAGE_MAP = {
-            "📝 일기 작성": "write",
-            "📅 감정 달력": "dashboard",
-            "🎵 음악/영화 추천": "result",
-            "📊 통계 보기": "stats",
-            "📂 행복 저장소": "happy"
-        }
-        
-        current_page_key = next((k for k, v in PAGE_MAP.items() if v == st.session_state.page), list(PAGE_MAP.keys())[0])
-        idx = list(PAGE_MAP.keys()).index(current_page_key)
-        
-        selected = st.radio("목차", list(PAGE_MAP.keys()), index=idx, key="sidebar_menu_radio")
-        
-        if PAGE_MAP[selected] != st.session_state.page:
-            st.session_state.page = PAGE_MAP[selected]
-            st.rerun() # ⭐️ 메뉴 이동 시 명시적 리런
+        # ⭐️ [목차] st.button 사용 및 st.rerun() 명시 (작동 보장)
+        if st.button("📝 일기 작성", use_container_width=True, key="sb_write"): st.session_state.page = "write"; st.rerun()
+        if st.button("📅 감정 달력", use_container_width=True, key="sb_calendar"): st.session_state.page = "dashboard"; st.rerun()
+        if st.button("🎵 음악/영화 추천", use_container_width=True, key="sb_recommend"): st.session_state.page = "result"; st.rerun()
+        if st.button("📊 통계 보기", use_container_width=True, key="sb_stats"): st.session_state.page = "stats"; st.rerun()
+        if st.button("📂 행복 저장소", use_container_width=True, key="sb_happy"): st.session_state.page = "happy"; st.rerun()
 
         st.divider()
-        # set_page 내부에 st.rerun()이 있으므로 작동함.
-        if st.button("🚪 로그아웃", use_container_width=True, on_click=set_page, args=("intro",)):
+        if st.button("🚪 로그아웃", use_container_width=True, key="sb_logout"):
             st.session_state.logged_in = False
+            st.session_state.page = "intro"
+            st.rerun() # ⭐️ 로그아웃 시 reruN
 
     # --- 라우팅 ---
     if st.session_state.page == "write": page_write(sh)
@@ -495,29 +463,29 @@ def page_write(sh):
     model, tokenizer, device, id2label = load_emotion_model()
     if not model: st.error("AI 로드 실패"); return
 
-    # ⭐️ [폼으로 안정화] st.form 사용
-    with st.form(key='diary_form'):
-        if "diary_input" not in st.session_state: st.session_state.diary_input = ""
-        txt = st.text_area("오늘 하루는 어땠나요?", value=st.session_state.diary_input, height=300, placeholder="오늘 있었던 일과 감정을 자유롭게 적어주세요...")
-        
-        submit_button = st.form_submit_button("🔍 감정 분석하고 저장하기", type="primary", use_container_width=True)
-
-    if submit_button:
-        # 폼이 제출된 후 처리
+    if "diary_input" not in st.session_state: st.session_state.diary_input = ""
+    # st.text_area는 폼 외부에 두어 상태를 유지
+    txt = st.text_area("오늘 하루는 어땠나요?", value=st.session_state.diary_input, height=300, placeholder="오늘 있었던 일과 감정을 자유롭게 적어주세요...", key="diary_text_input")
+    
+    # ⭐️ 감정 분석 및 저장 버튼: 상태 변경 및 rerun 명시
+    if st.button("🔍 감정 분석하고 저장하기", type="primary", use_container_width=True, key="write_save"):
         if not txt.strip(): 
             st.warning("내용을 입력해주세요."); 
             st.session_state.diary_input = txt # 입력값 유지
-            st.rerun() 
+            st.rerun()
             return
-        
+            
         # 폼 제출 성공 및 분석 시작
         with st.spinner("분석 중..."):
             emo, sc = analyze_diary(txt, model, tokenizer, device, id2label)
             st.session_state.final_emotion = emo
+            # 추천 데이터 생성
             st.session_state.music_recs = recommend_music(emo)
             st.session_state.movie_recs = recommend_movies(emo)
+            
             today = datetime.now(KST).strftime("%Y-%m-%d")
             add_diary(sh, st.session_state.username, today, emo, txt)
+            
             st.session_state.page = "result"
             st.rerun() # ⭐️ 페이지 이동을 위해 명시적 리런
 
@@ -533,6 +501,7 @@ def page_dashboard(sh):
         emo = data.get("emotion", "중립")
         if emo not in EMOTION_META: emo = "중립"
         meta = EMOTION_META[emo]
+        # 달력 텍스트 색상 조건부 설정 (야간 모드 가시성 확보)
         text_color = "#f0f0f0" if st.session_state.get("dark_mode", False) else "#000000"
         events.append({"start": date_str, "display": "background", "backgroundColor": meta["color"]})
         events.append({"title": meta["emoji"], "start": date_str, "allDay": True, "backgroundColor": "transparent", "borderColor": "transparent", "textColor": text_color})
@@ -552,27 +521,27 @@ def page_dashboard(sh):
     if today_str in my_diaries:
         st.success(f"오늘의 기록 완료! ({my_diaries[today_str]['emotion']})")
         c1, c2 = st.columns(2)
-        
-        def go_edit():
-            st.session_state.diary_input = my_diaries[today_str]["text"]
-            set_page("write") # set_page 내부에 st.rerun()이 있으므로 작동함.
-        
-        def go_rec():
-            emo = my_diaries[today_str]["emotion"]
-            st.session_state.final_emotion = emo
-            st.session_state.music_recs = recommend_music(emo)
-            st.session_state.movie_recs = recommend_movies(emo)
-            set_page("result") # set_page 내부에 st.rerun()이 있으므로 작동함.
-
-        # ⭐️ on_click에서 set_page 호출
-        if c1.button("✏️ 일기 수정하기", use_container_width=True, on_click=go_edit, key="dash_edit"):
-            pass
-        if c2.button("🎵 오늘의 추천 보기", type="primary", use_container_width=True, on_click=go_rec, key="dash_rec"):
-            pass
+        with c1:
+             # ⭐️ 일기 수정하기 버튼: 상태 변경 및 rerun 명시
+            if st.button("✏️ 일기 수정하기", use_container_width=True, key="dash_edit"):
+                st.session_state.diary_input = my_diaries[today_str]["text"]
+                st.session_state.page = "write"
+                st.rerun()
+        with c2:
+             # ⭐️ 오늘의 추천 보기 버튼: 상태 변경 및 rerun 명시
+            if st.button("🎵 오늘의 추천 보기", type="primary", use_container_width=True, key="dash_rec"):
+                emo = my_diaries[today_str]["emotion"]
+                st.session_state.final_emotion = emo
+                st.session_state.music_recs = recommend_music(emo)
+                st.session_state.movie_recs = recommend_movies(emo)
+                st.session_state.page = "result"
+                st.rerun()
     else:
-        # set_page 내부에 st.rerun()이 있으므로 작동함.
-        if st.button("✏️ 오늘의 일기 쓰러 가기", type="primary", use_container_width=True, on_click=set_page, args=("write",), key="dash_write"):
+        # ⭐️ 오늘의 일기 쓰러 가기 버튼: 상태 변경 및 rerun 명시
+        if st.button("✏️ 오늘의 일기 쓰러 가기", type="primary", use_container_width=True, key="dash_write"):
             st.session_state.diary_input = ""
+            st.session_state.page = "write"
+            st.rerun()
 
 def page_recommend(sh):
     st.markdown("## 🎵 음악/영화 추천")
@@ -586,9 +555,10 @@ def page_recommend(sh):
             st.session_state.movie_recs = recommend_movies(st.session_state.final_emotion)
         else:
             st.info("작성된 일기가 없습니다.")
-            # set_page 내부에 st.rerun()이 있으므로 작동함.
-            if st.button("일기 쓰러 가기", type="primary", use_container_width=True, on_click=set_page, args=("write",), key="rec_gtn"):
-                pass
+            # ⭐️ 일기 쓰러 가기 버튼: 상태 변경 및 rerun 명시
+            if st.button("일기 쓰러 가기", type="primary", key="rec_gtn"):
+                st.session_state.page = "write"
+                st.rerun()
             return
 
     emo = st.session_state.final_emotion
@@ -599,28 +569,37 @@ def page_recommend(sh):
     c1, c2 = st.columns(2)
     with c1:
         st.markdown("#### 🎵 추천 음악")
-        # st.rerun()이 직접 호출되므로 작동함.
-        if st.button("🔄 음악 새로고침", use_container_width=True, on_click=st.rerun, key="music_refresh"):
-            pass
+        # ⭐️ 음악 새로고침 버튼: 추천 재생성 및 rerun 명시
+        if st.button("🔄 음악 새로고침", use_container_width=True, key="music_refresh"):
+            st.session_state.music_recs = recommend_music(emo)
+            st.rerun()
         for item in st.session_state.get("music_recs", []):
-            if item.get('id'): components.iframe(f"https://open.spotify.com/embed/track/{item['id']}", height=250, width="100%")
+            # Spotify iframe URL 수정 (구글 콘텐츠 호스팅 문제 방지)
+            if item.get('id'): components.iframe(f"https://open.spotify.com/embed/track/{item['id']}?utm_source=generator", height=80, width="100%")
     with c2:
         st.markdown("#### 🎬 추천 영화")
-        # st.rerun()이 직접 호출되므로 작동함.
-        if st.button("🔄 영화 새로고침", use_container_width=True, on_click=st.rerun, key="movie_refresh"):
-            pass
+        # ⭐️ 영화 새로고침 버튼: 추천 재생성 및 rerun 명시
+        if st.button("🔄 영화 새로고침", use_container_width=True, key="movie_refresh"):
+            st.session_state.movie_recs = recommend_movies(emo)
+            st.rerun()
         for item in st.session_state.get('movie_recs', []):
             if item.get('poster'):
+                # ⭐️ 영화 추천 카드 디자인 유지
                 ic, tc = st.columns([1, 2])
                 ic.image(item['poster'], use_container_width=True)
                 tc.markdown(f"**{item['title']} ({item['year']})**\n⭐ {item['rating']}\n\n*{item.get('overview','')}*")
 
     st.divider()
     b1, b2, b3 = st.columns(3)
-    # set_page 내부에 st.rerun()이 있으므로 작동함.
-    if b1.button("📅 달력 보기", use_container_width=True, on_click=set_page, args=("dashboard",), key="rec_cal"): pass
-    if b2.button("📊 통계 보기", use_container_width=True, on_click=set_page, args=("stats",), key="rec_stat"): pass
-    if b3.button("📂 행복 저장소", use_container_width=True, on_click=set_page, args=("happy",), key="rec_happy"): pass
+    with b1:
+        # ⭐️ 달력 보기 버튼: 상태 변경 및 rerun 명시
+        if st.button("📅 달력 보기", use_container_width=True, key="rec_cal"): st.session_state.page = "dashboard"; st.rerun()
+    with b2:
+        # ⭐️ 통계 보기 버튼: 상태 변경 및 rerun 명시
+        if st.button("📊 통계 보기", use_container_width=True, key="rec_stat"): st.session_state.page = "stats"; st.rerun()
+    with b3:
+        # ⭐️ 행복 저장소 버튼: 상태 변경 및 rerun 명시
+        if st.button("📂 행복 저장소", use_container_width=True, key="rec_happy"): st.session_state.page = "happy"; st.rerun()
 
 def page_stats(sh):
     st.markdown("## 📊 나의 감정 통계")
@@ -630,33 +609,27 @@ def page_stats(sh):
         st.session_state.stats_year = now.year
         st.session_state.stats_month = now.month
 
-    # ⭐️ UI 뒤틀림 방지를 위해 월 이동 버튼 로직 단순화
-    
-    def prev_month():
-        if st.session_state.stats_month == 1:
-            st.session_state.stats_year -= 1
-            st.session_state.stats_month = 12
-        else: st.session_state.stats_month -= 1
-        st.rerun() # 월 이동 시 st.rerun() 필요
-    
-    def next_month():
-        if st.session_state.stats_month == 12:
-            st.session_state.stats_year += 1
-            st.session_state.stats_month = 1
-        else: st.session_state.stats_month += 1
-        st.rerun() # 월 이동 시 st.rerun() 필요
-
-    # ⭐️ 월 이동 버튼 영역
-    col_prev, col_title, col_next = st.columns([1, 3, 1])
-    
-    if col_prev.button("◀️", use_container_width=True, on_click=prev_month, key="prev_stats"): pass
-    
-    # 월/연도 텍스트 색상 직접 지정 (가시성 확보)
-    text_color = "#f0f0f0" if st.session_state.get("dark_mode", False) else "#333"
-    col_title.markdown(f"<h3 style='text-align: center; margin:0; color: {text_color};'>{st.session_state.stats_year}년 {st.session_state.stats_month}월</h3>", unsafe_allow_html=True)
-    
-    if col_next.button("▶️", use_container_width=True, on_click=next_month, key="next_stats"): pass
-    
+    c1, c2, c3 = st.columns([0.2, 0.6, 0.2])
+    with c1:
+        # ⭐️ 월 이동 버튼 (이전): 상태 변경 및 rerun 명시
+        if st.button("◀️", use_container_width=True, key="prev_stats"):
+            if st.session_state.stats_month == 1:
+                st.session_state.stats_year -= 1
+                st.session_state.stats_month = 12
+            else: st.session_state.stats_month -= 1
+            st.rerun()
+    with c2:
+        # 월/연도 텍스트 색상 직접 지정 (가시성 확보)
+        text_color = "#f0f0f0" if st.session_state.get("dark_mode", False) else "#333"
+        st.markdown(f"<h3 style='text-align: center; margin:0; color: {text_color};'>{st.session_state.stats_year}년 {st.session_state.stats_month}월</h3>", unsafe_allow_html=True)
+    with c3:
+        # ⭐️ 월 이동 버튼 (다음): 상태 변경 및 rerun 명시
+        if st.button("▶️", use_container_width=True, key="next_stats"):
+            if st.session_state.stats_month == 12:
+                st.session_state.stats_year += 1
+                st.session_state.stats_month = 1
+            else: st.session_state.stats_month += 1
+            st.rerun()
     st.write("")
 
     my_diaries = get_user_diaries(sh, st.session_state.username)
@@ -682,12 +655,12 @@ def page_stats(sh):
         most_common_emo = max(set(month_data), key=month_data.count)
         total_count = len(month_data)
 
-        # ⭐️ 통계 요약 배경 및 선 제거
+        # ⭐️ 통계 요약 마크다운
         stat_label_color = "#555" if not st.session_state.dark_mode else "#bbbbbb"
         stat_divider_color = "rgba(128,128,128,0.3)" if not st.session_state.dark_mode else "#444444"
 
         st.markdown(f"""
-            <div style='display:flex; justify-content:space-around; text-align:center;'>
+            <div style='display:flex; justify-content:space-around; text-align:center; margin-bottom: 20px;'>
                 <div style='flex:1; padding: 10px 0; border-right: 1px solid {stat_divider_color};'>
                     <div style='font-size:1.8em; font-weight:700; color:#6C5CE7;'>{total_count}개</div>
                     <div style='font-size:0.9em; color:{stat_label_color};'>총 기록 수</div>
@@ -697,7 +670,6 @@ def page_stats(sh):
                     <div style='font-size:0.9em; color:{stat_label_color};'>가장 많이 느낀 감정</div>
                 </div>
             </div>
-            <br>
         """, unsafe_allow_html=True)
         
         st.vega_lite_chart(chart_data, {
@@ -716,15 +688,17 @@ def page_stats(sh):
                 "tooltip": [{"field": "emotion"}, {"field": "count"}]
             }
         }, use_container_width=True)
-        
     else:
         st.info("이 달에는 작성된 일기가 없습니다.")
 
     st.divider()
     b1, b2 = st.columns(2)
-    # set_page 내부에 st.rerun()이 있으므로 작동함.
-    if b1.button("📅 달력 보기", use_container_width=True, on_click=set_page, args=("dashboard",), key="stats_cal"): pass
-    if b2.button("📂 행복 저장소 보러가기", use_container_width=True, on_click=set_page, args=("happy",), key="stats_happy"): pass
+    with b1:
+        # ⭐️ 달력 보기 버튼: 상태 변경 및 rerun 명시
+        if st.button("📅 달력 보기", use_container_width=True, key="stats_cal"): st.session_state.page = "dashboard"; st.rerun()
+    with b2:
+        # ⭐️ 행복 저장소 버튼: 상태 변경 및 rerun 명시
+        if st.button("📂 행복 저장소 보러가기", use_container_width=True, key="stats_happy"): st.session_state.page = "happy"; st.rerun()
 
 def page_happy_storage(sh):
     st.markdown("## 📂 행복 저장소")
@@ -740,7 +714,7 @@ def page_happy_storage(sh):
     else:
         dates = sorted(happy_moments.keys(), reverse=True)
         for i in range(0, len(dates), 2):
-            cols = st.columns(2, gap="large") # 겹침 방지 간격 유지
+            cols = st.columns(2, gap="large") 
             date1 = dates[i]
             data1 = happy_moments[date1]
             with cols[0]:
@@ -764,9 +738,12 @@ def page_happy_storage(sh):
 
     st.divider()
     b1, b2 = st.columns(2)
-    # set_page 내부에 st.rerun()이 있으므로 작동함.
-    if b1.button("📅 달력 보기", use_container_width=True, on_click=set_page, args=("dashboard",), key="happy_cal"): pass
-    if b2.button("📊 통계 보러가기", use_container_width=True, on_click=set_page, args=("stats",), key="happy_stats"): pass
+    with b1:
+        # ⭐️ 달력 보기 버튼: 상태 변경 및 rerun 명시
+        if st.button("📅 달력 보기", use_container_width=True, key="happy_cal"): st.session_state.page = "dashboard"; st.rerun()
+    with b2:
+        # ⭐️ 통계 보기 버튼: 상태 변경 및 rerun 명시
+        if st.button("📊 통계 보러가기", use_container_width=True, key="happy_stats"): st.session_state.page = "stats"; st.rerun()
 
 # --- 메인 실행 로직 ---
 if st.session_state.logged_in: main_app()
