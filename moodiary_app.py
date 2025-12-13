@@ -15,7 +15,7 @@ import pandas as pd
 try:
     import spotipy
     from spotipy.oauth2 import SpotifyClientCredentials
-    SPOTIPY_AVAILABLE = True
+    SPOTIPYAVAILABLE = True
 except ImportError:
     spotipy = None
     SpotifyClientCredentials = None
@@ -130,7 +130,15 @@ def apply_custom_css():
         }}
         .stButton > button:hover {{ transform: translateY(-2px); filter: brightness(1.1); }}
 
-        /* 6. ⭐️ 사이드바 메뉴 (st.radio를 메뉴처럼) ⭐️ */
+        /* 6. 사이드바 메뉴 버튼 (안정화) */
+        section[data-testid="stSidebar"] .stButton > button {{
+            color: {main_text}; background: none; font-weight: 600;
+        }}
+        section[data-testid="stSidebar"] .stButton > button:hover {{
+            color: {menu_checked}; background: none; transform: none;
+        }}
+
+        /* 7. ⭐️ 사이드바 메뉴 (st.radio를 메뉴처럼) ⭐️ */
         section[data-testid="stSidebar"] .stRadio > div[role="radiogroup"] {{
             border: none; padding: 0; gap: 5px;
         }}
@@ -155,7 +163,8 @@ def apply_custom_css():
             display: none !important;
         }}
 
-        /* 7. 행복 저장소 카드 */
+
+        /* 8. 행복 저장소 카드 */
         .happy-card {{
             background: {card_bg}; border-left: 6px solid #FFD700;
             padding: 25px; border-radius: 20px; margin-bottom: 15px;
@@ -164,13 +173,13 @@ def apply_custom_css():
         .happy-date {{ color: {main_text}; font-weight: 700; margin-bottom: 12px; }}
         .happy-text {{ font-size: 1.4em; font-weight: 600; line-height: 1.5; color: {card_text_happy}; }}
 
-        /* 8. 통계 요약 카드 */
+        /* 9. 통계 요약 카드 */
         .stat-card {{
             background: transparent; box-shadow: none; padding: 10px 0; border: none; text-align: center;
         }}
         .stat-card:first-child {{ border-right: {stat_card_line}; }} 
         
-        /* 9. MOODIARY 텍스트 색상 애니메이션 */
+        /* 10. MOODIARY 텍스트 색상 애니메이션 */
         @keyframes color-shift {{
             0% {{ color: #6C5CE7; }}
             33% {{ color: #FF7675; }}
@@ -359,7 +368,6 @@ def intro_page():
                 <br>
             </div>
         """, unsafe_allow_html=True)
-        
         # ⭐️ 버튼 클릭 시 set_page 함수 호출
         if st.button("✨ 내 마음 기록하러 가기", use_container_width=True, on_click=set_page, args=("login",), key="intro_start"):
             pass
@@ -461,7 +469,6 @@ def main_app():
             "📂 행복 저장소": "happy"
         }
         
-        # st.session_state.page의 현재 값을 기준으로 인덱스를 찾습니다.
         current_page_key = next((k for k, v in PAGE_MAP.items() if v == st.session_state.page), list(PAGE_MAP.keys())[0])
         idx = list(PAGE_MAP.keys()).index(current_page_key)
         
@@ -469,7 +476,7 @@ def main_app():
         
         if PAGE_MAP[selected] != st.session_state.page:
             st.session_state.page = PAGE_MAP[selected]
-            st.rerun()
+            st.rerun() # ⭐️ 메뉴 이동 시 명시적 리런
 
         st.divider()
         if st.button("🚪 로그아웃", use_container_width=True, on_click=set_page, args=("intro",)):
@@ -557,13 +564,14 @@ def page_dashboard(sh):
             st.session_state.movie_recs = recommend_movies(emo)
             set_page("result")
 
+        # ⭐️ on_click에서 set_page 호출
         if c1.button("✏️ 일기 수정하기", use_container_width=True, on_click=go_edit, key="dash_edit"):
             pass
         if c2.button("🎵 오늘의 추천 보기", type="primary", use_container_width=True, on_click=go_rec, key="dash_rec"):
             pass
     else:
         if st.button("✏️ 오늘의 일기 쓰러 가기", type="primary", use_container_width=True, on_click=set_page, args=("write",), key="dash_write"):
-            st.session_state.diary_input = "" # 새로운 일기 작성 시 기존 입력값 초기화
+            st.session_state.diary_input = ""
 
 def page_recommend(sh):
     st.markdown("## 🎵 음악/영화 추천")
@@ -590,13 +598,13 @@ def page_recommend(sh):
     with c1:
         st.markdown("#### 🎵 추천 음악")
         if st.button("🔄 음악 새로고침", use_container_width=True, on_click=st.rerun, key="music_refresh"):
-            pass # 새로고침 버튼은 별도의 로직 없이 rerun만 필요
+            pass
         for item in st.session_state.get("music_recs", []):
             if item.get('id'): components.iframe(f"https://open.spotify.com/embed/track/{item['id']}", height=250, width="100%")
     with c2:
         st.markdown("#### 🎬 추천 영화")
         if st.button("🔄 영화 새로고침", use_container_width=True, on_click=st.rerun, key="movie_refresh"):
-            pass # 새로고침 버튼은 별도의 로직 없이 rerun만 필요
+            pass
         for item in st.session_state.get('movie_recs', []):
             if item.get('poster'):
                 ic, tc = st.columns([1, 2])
@@ -605,6 +613,7 @@ def page_recommend(sh):
 
     st.divider()
     b1, b2, b3 = st.columns(3)
+    # ⭐️ on_click에서 set_page 호출
     if b1.button("📅 달력 보기", use_container_width=True, on_click=set_page, args=("dashboard",), key="rec_cal"): pass
     if b2.button("📊 통계 보기", use_container_width=True, on_click=set_page, args=("stats",), key="rec_stat"): pass
     if b3.button("📂 행복 저장소", use_container_width=True, on_click=set_page, args=("happy",), key="rec_happy"): pass
