@@ -572,7 +572,7 @@ def page_recommend(sh):
         for item in st.session_state.get("music_recs", []):
             if item.get('id'):
                 # ⭐️⭐️⭐️ Spotify iframe 높이 500으로 수정
-                components.iframe(f"https://open.spotify.com/embed/track/{item['id']}?utm_source=generator", height=400, width="50%")
+                components.iframe(f"https://open.spotify.com/embed/track/{item['id']}?utm_source=generator", height=200, width="50%")
     with c2:
         st.markdown("#### 🎬 추천 영화")
         # ⭐️ 영화 새로고침 버튼: 추천 재생성 및 rerun 명시
@@ -746,4 +746,5 @@ def page_happy_storage(sh):
 if st.session_state.logged_in: main_app()
 elif st.session_state.page == "intro": intro_page()
 else: login_page()
+
 
