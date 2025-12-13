@@ -42,10 +42,11 @@ KST = timezone(timedelta(hours=9))
 
 st.set_page_config(layout="wide", page_title="MOODIARY", page_icon="💖")
 
-# ⭐️ 페이지 이동 함수 (st.rerun()은 호출하지 않고 상태만 변경)
+# ⭐️ 페이지 이동 함수 (st.rerun() 추가)
 def set_page(page_name):
-    """세션 상태만 변경하고, 메인 루프에서 st.rerun()을 처리하도록 합니다."""
+    """세션 상태를 변경하고, 변경된 상태를 바탕으로 화면을 갱신합니다."""
     st.session_state.page = page_name
+    st.rerun() # <-- 수정된 부분
 
 # ⭐️ 커스텀 CSS (야간 모드 CSS 조건부 렌더링)
 def apply_custom_css():
@@ -58,11 +59,11 @@ def apply_custom_css():
         bg_end = "#403A4E"
         
         main_bg = "rgba(40, 40, 40, 0.9)"
-        main_text = "#f0f0f0"       
+        main_text = "#f0f0f0"        
         secondary_text = "#bbbbbb"  
         sidebar_bg = "#1e1e1e"
         menu_checked = "#A29BFE"
-        card_bg = "#3a3a3a"         
+        card_bg = "#3a3a3a"          
         card_text_happy = "#ffffff" 
         stat_card_line = "1px solid #444444" 
     else:
@@ -192,7 +193,7 @@ def apply_custom_css():
     st.markdown(css, unsafe_allow_html=True)
 
 # =========================================
-# 🔐 3) 구글 시트 데이터베이스
+# 🔐 3) 구글 시트 데이터베이스 (생략: 변경 없음)
 # =========================================
 @st.cache_resource
 def get_gsheets_client():
@@ -258,7 +259,7 @@ def add_diary(sh, username, date, emotion, text):
     except: return False
 
 # =========================================
-# 🧠 4) AI & 추천 로직 (생략)
+# 🧠 4) AI & 추천 로직 (생략: 변경 없음)
 # =========================================
 @st.cache_resource
 def load_emotion_model():
@@ -366,7 +367,7 @@ def intro_page():
                 <br>
             </div>
         """, unsafe_allow_html=True)
-        # ⭐️ 버튼 클릭 시 set_page 함수 호출
+        # set_page 내부에 st.rerun()이 있으므로 작동함.
         if st.button("✨ 내 마음 기록하러 가기", use_container_width=True, on_click=set_page, args=("login",), key="intro_start"):
             pass
 
@@ -408,7 +409,7 @@ def login_page():
                     st.session_state.page = "dashboard" if today_str in diaries else "write"
                 else: 
                     st.error("아이디/비밀번호 오류")
-                st.rerun() 
+                st.rerun() # 로그인 시에도 reruN 필요
             
             if st.button("로그인", use_container_width=True, on_click=attempt_login, key="login_btn"):
                 pass
@@ -424,10 +425,10 @@ def login_page():
                 else:
                     if add_user(sh, nid, npw): st.success("가입 성공! 로그인하세요.")
                     else: st.error("가입 실패")
-                st.rerun()
+                st.rerun() # 가입 후에도 reruN 필요
             
             if st.button("가입하기", use_container_width=True, on_click=attempt_signup, key="signup_btn"):
-                 pass
+                    pass
         st.markdown("</div>", unsafe_allow_html=True)
 
 # 2. 메인 앱
@@ -477,6 +478,7 @@ def main_app():
             st.rerun() # ⭐️ 메뉴 이동 시 명시적 리런
 
         st.divider()
+        # set_page 내부에 st.rerun()이 있으므로 작동함.
         if st.button("🚪 로그아웃", use_container_width=True, on_click=set_page, args=("intro",)):
             st.session_state.logged_in = False
 
@@ -536,14 +538,14 @@ def page_dashboard(sh):
         events.append({"title": meta["emoji"], "start": date_str, "allDay": True, "backgroundColor": "transparent", "borderColor": "transparent", "textColor": text_color})
     
     calendar(events=events, options={"headerToolbar": {"left": "prev,next today", "center": "title", "right": ""}, "initialView": "dayGridMonth"},
-             custom_css="""
-             .fc-event-title { font-size: 3em !important; display: flex; justify-content: center; align-items: center; height: 100%; transform: translateY(-25px); text-shadow: 1px 1px 2px rgba(0,0,0,0.2); }
-             .fc-daygrid-event { border: none !important; background-color: transparent !important; }
-             .fc-daygrid-day-number { z-index: 10 !important; color: var(--main-text-color, black); font-weight: bold; }
-             .fc-bg-event { opacity: 1.0 !important; }
-             .fc-col-header-cell-cushion { color: var(--main-text-color, #333); font-weight: bold; }
-             """
-             )
+              custom_css="""
+              .fc-event-title { font-size: 3em !important; display: flex; justify-content: center; align-items: center; height: 100%; transform: translateY(-25px); text-shadow: 1px 1px 2px rgba(0,0,0,0.2); }
+              .fc-daygrid-event { border: none !important; background-color: transparent !important; }
+              .fc-daygrid-day-number { z-index: 10 !important; color: var(--main-text-color, black); font-weight: bold; }
+              .fc-bg-event { opacity: 1.0 !important; }
+              .fc-col-header-cell-cushion { color: var(--main-text-color, #333); font-weight: bold; }
+              """
+              )
     
     st.write("")
     today_str = datetime.now(KST).strftime("%Y-%m-%d")
@@ -553,14 +555,14 @@ def page_dashboard(sh):
         
         def go_edit():
             st.session_state.diary_input = my_diaries[today_str]["text"]
-            set_page("write")
+            set_page("write") # set_page 내부에 st.rerun()이 있으므로 작동함.
         
         def go_rec():
             emo = my_diaries[today_str]["emotion"]
             st.session_state.final_emotion = emo
             st.session_state.music_recs = recommend_music(emo)
             st.session_state.movie_recs = recommend_movies(emo)
-            set_page("result")
+            set_page("result") # set_page 내부에 st.rerun()이 있으므로 작동함.
 
         # ⭐️ on_click에서 set_page 호출
         if c1.button("✏️ 일기 수정하기", use_container_width=True, on_click=go_edit, key="dash_edit"):
@@ -568,6 +570,7 @@ def page_dashboard(sh):
         if c2.button("🎵 오늘의 추천 보기", type="primary", use_container_width=True, on_click=go_rec, key="dash_rec"):
             pass
     else:
+        # set_page 내부에 st.rerun()이 있으므로 작동함.
         if st.button("✏️ 오늘의 일기 쓰러 가기", type="primary", use_container_width=True, on_click=set_page, args=("write",), key="dash_write"):
             st.session_state.diary_input = ""
 
@@ -583,6 +586,7 @@ def page_recommend(sh):
             st.session_state.movie_recs = recommend_movies(st.session_state.final_emotion)
         else:
             st.info("작성된 일기가 없습니다.")
+            # set_page 내부에 st.rerun()이 있으므로 작동함.
             if st.button("일기 쓰러 가기", type="primary", use_container_width=True, on_click=set_page, args=("write",), key="rec_gtn"):
                 pass
             return
@@ -595,12 +599,14 @@ def page_recommend(sh):
     c1, c2 = st.columns(2)
     with c1:
         st.markdown("#### 🎵 추천 음악")
+        # st.rerun()이 직접 호출되므로 작동함.
         if st.button("🔄 음악 새로고침", use_container_width=True, on_click=st.rerun, key="music_refresh"):
             pass
         for item in st.session_state.get("music_recs", []):
             if item.get('id'): components.iframe(f"https://open.spotify.com/embed/track/{item['id']}", height=250, width="100%")
     with c2:
         st.markdown("#### 🎬 추천 영화")
+        # st.rerun()이 직접 호출되므로 작동함.
         if st.button("🔄 영화 새로고침", use_container_width=True, on_click=st.rerun, key="movie_refresh"):
             pass
         for item in st.session_state.get('movie_recs', []):
@@ -611,7 +617,7 @@ def page_recommend(sh):
 
     st.divider()
     b1, b2, b3 = st.columns(3)
-    # ⭐️ on_click에서 set_page 호출
+    # set_page 내부에 st.rerun()이 있으므로 작동함.
     if b1.button("📅 달력 보기", use_container_width=True, on_click=set_page, args=("dashboard",), key="rec_cal"): pass
     if b2.button("📊 통계 보기", use_container_width=True, on_click=set_page, args=("stats",), key="rec_stat"): pass
     if b3.button("📂 행복 저장소", use_container_width=True, on_click=set_page, args=("happy",), key="rec_happy"): pass
@@ -631,14 +637,14 @@ def page_stats(sh):
             st.session_state.stats_year -= 1
             st.session_state.stats_month = 12
         else: st.session_state.stats_month -= 1
-        st.rerun() 
+        st.rerun() # 월 이동 시 st.rerun() 필요
     
     def next_month():
         if st.session_state.stats_month == 12:
             st.session_state.stats_year += 1
             st.session_state.stats_month = 1
         else: st.session_state.stats_month += 1
-        st.rerun() 
+        st.rerun() # 월 이동 시 st.rerun() 필요
 
     # ⭐️ 월 이동 버튼 영역
     col_prev, col_title, col_next = st.columns([1, 3, 1])
@@ -710,11 +716,13 @@ def page_stats(sh):
                 "tooltip": [{"field": "emotion"}, {"field": "count"}]
             }
         }, use_container_width=True)
+        
     else:
         st.info("이 달에는 작성된 일기가 없습니다.")
 
     st.divider()
     b1, b2 = st.columns(2)
+    # set_page 내부에 st.rerun()이 있으므로 작동함.
     if b1.button("📅 달력 보기", use_container_width=True, on_click=set_page, args=("dashboard",), key="stats_cal"): pass
     if b2.button("📂 행복 저장소 보러가기", use_container_width=True, on_click=set_page, args=("happy",), key="stats_happy"): pass
 
@@ -756,6 +764,7 @@ def page_happy_storage(sh):
 
     st.divider()
     b1, b2 = st.columns(2)
+    # set_page 내부에 st.rerun()이 있으므로 작동함.
     if b1.button("📅 달력 보기", use_container_width=True, on_click=set_page, args=("dashboard",), key="happy_cal"): pass
     if b2.button("📊 통계 보러가기", use_container_width=True, on_click=set_page, args=("stats",), key="happy_stats"): pass
 
