@@ -15,7 +15,7 @@ import pandas as pd
 try:
     import spotipy
     from spotipy.oauth2 import SpotifyClientCredentials
-    SPOTIPYAVAILABLE = True
+    SPOTIPY_AVAILABLE = True
 except ImportError:
     spotipy = None
     SpotifyClientCredentials = None
@@ -130,15 +130,7 @@ def apply_custom_css():
         }}
         .stButton > button:hover {{ transform: translateY(-2px); filter: brightness(1.1); }}
 
-        /* 6. 사이드바 메뉴 버튼 (안정화) */
-        section[data-testid="stSidebar"] .stButton > button {{
-            color: {main_text}; background: none; font-weight: 600;
-        }}
-        section[data-testid="stSidebar"] .stButton > button:hover {{
-            color: {menu_checked}; background: none; transform: none;
-        }}
-
-        /* 7. ⭐️ 사이드바 메뉴 (st.radio를 메뉴처럼) ⭐️ */
+        /* 6. ⭐️ 사이드바 메뉴 (st.radio를 메뉴처럼) ⭐️ */
         section[data-testid="stSidebar"] .stRadio > div[role="radiogroup"] {{
             border: none; padding: 0; gap: 5px;
         }}
@@ -163,8 +155,7 @@ def apply_custom_css():
             display: none !important;
         }}
 
-
-        /* 8. 행복 저장소 카드 */
+        /* 7. 행복 저장소 카드 */
         .happy-card {{
             background: {card_bg}; border-left: 6px solid #FFD700;
             padding: 25px; border-radius: 20px; margin-bottom: 15px;
@@ -173,13 +164,13 @@ def apply_custom_css():
         .happy-date {{ color: {main_text}; font-weight: 700; margin-bottom: 12px; }}
         .happy-text {{ font-size: 1.4em; font-weight: 600; line-height: 1.5; color: {card_text_happy}; }}
 
-        /* 9. 통계 요약 카드 */
+        /* 8. 통계 요약 카드 */
         .stat-card {{
             background: transparent; box-shadow: none; padding: 10px 0; border: none; text-align: center;
         }}
         .stat-card:first-child {{ border-right: {stat_card_line}; }} 
         
-        /* 10. MOODIARY 텍스트 색상 애니메이션 */
+        /* 9. MOODIARY 텍스트 색상 애니메이션 */
         @keyframes color-shift {{
             0% {{ color: #6C5CE7; }}
             33% {{ color: #FF7675; }}
@@ -479,6 +470,7 @@ def main_app():
             st.rerun() # ⭐️ 메뉴 이동 시 명시적 리런
 
         st.divider()
+        # ⭐️ on_click에서 set_page 호출
         if st.button("🚪 로그아웃", use_container_width=True, on_click=set_page, args=("intro",)):
             st.session_state.logged_in = False
 
@@ -626,7 +618,8 @@ def page_stats(sh):
         st.session_state.stats_year = now.year
         st.session_state.stats_month = now.month
 
-    c1, c2, c3 = st.columns([0.2, 0.6, 0.2])
+    # ⭐️ 버튼 UI 충돌 방지를 위해 st.columns 대신 간결한 레이아웃 사용
+    st.write("<br>", unsafe_allow_html=True)
     
     def prev_month():
         if st.session_state.stats_month == 1:
@@ -642,13 +635,16 @@ def page_stats(sh):
         else: st.session_state.stats_month += 1
         st.rerun() # 명시적 리런
 
-    if c1.button("◀️", use_container_width=True, on_click=prev_month, key="prev_stats"): pass
+    # ⭐️ 월 이동 버튼 영역 (UI 뒤틀림 방지)
+    col_prev, col_title, col_next = st.columns([1, 3, 1])
     
-    # ⭐️ 월/연도 텍스트 색상 직접 지정 (가시성 확보)
+    if col_prev.button("◀️", use_container_width=True, on_click=prev_month, key="prev_stats"): pass
+    
+    # 월/연도 텍스트 색상 직접 지정 (가시성 확보)
     text_color = "#f0f0f0" if st.session_state.get("dark_mode", False) else "#333"
-    c2.markdown(f"<h3 style='text-align: center; margin:0; color: {text_color};'>{st.session_state.stats_year}년 {st.session_state.stats_month}월</h3>", unsafe_allow_html=True)
+    col_title.markdown(f"<h3 style='text-align: center; margin:0; color: {text_color};'>{st.session_state.stats_year}년 {st.session_state.stats_month}월</h3>", unsafe_allow_html=True)
     
-    if c3.button("▶️", use_container_width=True, on_click=next_month, key="next_stats"): pass
+    if col_next.button("▶️", use_container_width=True, on_click=next_month, key="next_stats"): pass
     
     st.write("")
 
