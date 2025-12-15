@@ -22,7 +22,7 @@ except ImportError:
     SPOTIPY_AVAILABLE = False
 
 # --- 2) 기본 설정 ---
-EMOTION_MODEL_ID = "JUDONGHYEOK/6-emotion-bert-korean-v6-balanced"
+EMOTION_MODEL_ID = "JUDONGHYEOK/6-emotion-bert-korean-v2"
 TMDB_BASE_URL = "https://api.themoviedb.org/3"
 GSHEET_DB_NAME = "moodiary_db" 
 
@@ -42,7 +42,7 @@ KST = timezone(timedelta(hours=9))
 
 st.set_page_config(layout="wide", page_title="MOODIARY", page_icon="💖")
 
-# ⭐️ 커스텀 CSS (야간 모드 CSS 조건부 렌더링)
+# ⭐️ 커스텀 CSS (야간 모드 CSS 조건부 렌더링 및 사이드바 수정)
 def apply_custom_css():
     
     is_dark = st.session_state.get("dark_mode", False)
@@ -164,6 +164,16 @@ def apply_custom_css():
             100% {{ color: #6C5CE7; }}
         }}
         .animated-title {{ font-size: 3.5rem !important; font-weight: 800; animation: color-shift 5s ease-in-out infinite alternate; }}
+
+        /* 11. ⭐️ 사이드바 강제 고정/열기 시도 (토글 버튼은 유지) */
+        section[data-testid="stSidebar"] {{
+            /* 사이드바 자체를 항상 보이게 설정 (화면이 좁을 때만 효과) */
+            transform: none !important; 
+            visibility: visible !important;
+            /* 최소 너비 설정 */
+            min-width: 250px !important; 
+        }}
+        /* 12. 토글 버튼을 숨기는 코드는 제거했습니다. */
 
         header {{visibility: hidden;}} footer {{visibility: hidden;}}
         </style>
@@ -571,8 +581,8 @@ def page_recommend(sh):
             st.rerun()
         for item in st.session_state.get("music_recs", []):
             if item.get('id'):
-                # ⭐️⭐️⭐️ Spotify iframe 높이 500으로 수정
-                components.iframe(f"https://open.spotify.com/embed/track/{item['id']}?utm_source=generator", height=300, width="50%")
+                # ⭐️ Spotify iframe 높이 500으로 수정
+                components.iframe(f"https://open.spotify.com/embed/track/{item['id']}?utm_source=generator", height=500, width="100%")
     with c2:
         st.markdown("#### 🎬 추천 영화")
         # ⭐️ 영화 새로고침 버튼: 추천 재생성 및 rerun 명시
@@ -746,7 +756,3 @@ def page_happy_storage(sh):
 if st.session_state.logged_in: main_app()
 elif st.session_state.page == "intro": intro_page()
 else: login_page()
-
-
-
-
