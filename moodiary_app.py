@@ -22,7 +22,7 @@ except ImportError:
     SPOTIPY_AVAILABLE = False
 
 # --- 2) 기본 설정 ---
-EMOTION_MODEL_ID = "JUDONGHYEOK/6-emotion-bert-korean-v2"
+EMOTION_MODEL_ID = "JUDONGHYEOK/6-emotion-bert-korean-v6-balanced"
 TMDB_BASE_URL = "https://api.themoviedb.org/3"
 GSHEET_DB_NAME = "moodiary_db" 
 
@@ -756,3 +756,4 @@ def page_happy_storage(sh):
 if st.session_state.logged_in: main_app()
 elif st.session_state.page == "intro": intro_page()
 else: login_page()
+
