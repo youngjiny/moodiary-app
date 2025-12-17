@@ -30,19 +30,19 @@ GSHEET_DB_NAME = "moodiary_db"
 EMERGENCY_TMDB_KEY = "8587d6734fd278ecc05dcbe710c29f9c"
 
 EMOTION_META = {
-    "기쁨": {"color": "rgba(255, 215, 0, 0.6)", "emoji": "😆", "desc": "웃음이 끊이지 않는 하루!"},
-    "분노": {"color": "rgba(255, 80, 80, 0.6)", "emoji": "🤬", "desc": "워워, 진정이 필요해요."},
-    "불안": {"color": "rgba(255, 160, 50, 0.6)", "emoji": "😰", "desc": "마음이 조마조마해요."},
-    "슬픔": {"color": "rgba(80, 120, 255, 0.6)", "emoji": "😭", "desc": "마음의 위로가 필요해요."},
-    "힘듦": {"color": "rgba(150, 150, 150, 0.6)", "emoji": "🤯", "desc": "휴식이 절실한 하루."},
-    "중립": {"color": "rgba(80, 180, 120, 0.6)", "emoji": "😐", "desc": "평온하고 무난한 하루."}
+    "기쁨": {"color": "#FFD700", "emoji": "😆", "desc": "웃음이 끊이지 않는 하루!"},
+    "분노": {"color": "#FF5050", "emoji": "🤬", "desc": "워워, 진정이 필요해요."},
+    "불안": {"color": "#FFA032", "emoji": "😰", "desc": "마음이 조마조마해요."},
+    "슬픔": {"color": "#5078FF", "emoji": "😭", "desc": "마음의 위로가 필요해요."},
+    "힘듦": {"color": "#969696", "emoji": "🤯", "desc": "휴식이 절실한 하루."},
+    "중립": {"color": "#50B478", "emoji": "😐", "desc": "평온하고 무난한 하루."}
 }
 
 KST = timezone(timedelta(hours=9))
 
 st.set_page_config(layout="wide", page_title="MOODIARY", page_icon="💖")
 
-# ⭐️ 커스텀 CSS (달력 꽉 찬 배경 및 영화 카드 수정)
+# ⭐️ 커스텀 CSS (이전 예쁜 버튼 복구 + 달력 꽉 찬 배경)
 def apply_custom_css():
     is_dark = st.session_state.get("dark_mode", False)
     if is_dark:
@@ -64,9 +64,17 @@ def apply_custom_css():
         .stApp {{ background: linear-gradient(-45deg, {bg_start}, {bg_mid}, {bg_end}); background-size: 400% 400%; animation: gradient 15s ease infinite; }}
         @keyframes gradient {{ 0% {{background-position: 0% 50%;}} 50% {{background-position: 100% 50%;}} 100% {{background-position: 0% 50%;}} }}
         .block-container {{ background: {main_bg}; backdrop-filter: blur(15px); border-radius: 25px; box-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.15); padding: 3rem !important; margin-top: 2rem; max-width: 1000px; }}
-        p, label, .stMarkdown, .stTextarea, .stTextInput {{ color: {main_text} !important; }}
         
-        /* 영화 카드: 줄거리 안짤리게 수정 */
+        /* ⭐️ 이전 그라데이션 버튼 스타일 복구 */
+        .stButton > button {{
+            width: 100%; border-radius: 20px; border: none;
+            background: linear-gradient(90deg, #6C5CE7 0%, #a29bfe 100%);
+            color: white; font-weight: 700; padding: 0.6rem 1rem;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1); transition: all 0.3s ease;
+        }}
+        .stButton > button:hover {{ transform: translateY(-2px); filter: brightness(1.1); }}
+
+        /* 영화 카드: 줄거리 안짤리게 */
         .movie-card {{
             background: {card_bg if is_dark else 'white'};
             border-radius: 15px; padding: 15px; margin-bottom: 20px;
@@ -89,7 +97,7 @@ def apply_custom_css():
     """
     st.markdown(css, unsafe_allow_html=True)
 
-# --- 3) DB 로직 (생략) ---
+# --- 3) DB 로직 ---
 @st.cache_resource
 def get_gsheets_client():
     try:
@@ -131,7 +139,7 @@ def add_diary(sh, username, date, emotion, text):
         get_user_diaries.clear(); return True
     except: return False
 
-# --- 4) AI & 추천 로직 (생략) ---
+# --- 4) AI & 추천 로직 ---
 @st.cache_resource
 def load_emotion_model():
     try:
@@ -206,16 +214,20 @@ def login_page():
         tab1, tab2 = st.tabs(["🔑 로그인", "📝 회원가입"])
         if not sh: st.error("DB 연결 중..."); return
         with tab1:
-            lid, lpw = st.text_input("아이디"), st.text_input("비밀번호", type="password")
+            lid = st.text_input("아이디")
+            lpw = st.text_input("비밀번호", type="password")
             if st.button("로그인", use_container_width=True):
                 users = get_all_users(sh)
                 if lid in users and users[lid] == str(lpw):
                     st.session_state.logged_in, st.session_state.username = True, lid
                     st.session_state.page = "dashboard"; st.rerun()
+                else: st.error("아이디 혹은 비밀번호가 틀렸습니다.")
         with tab2:
-            nid, npw = st.text_input("새 아이디"), st.text_input("새 비밀번호 (4자리)", type="password", max_chars=4)
+            nid = st.text_input("새 아이디")
+            npw = st.text_input("새 비밀번호 (4자리)", type="password", max_chars=4)
             if st.button("가입하기", use_container_width=True):
                 if add_user(sh, nid, npw): st.success("가입 완료!"); st.rerun()
+                else: st.error("가입에 실패했습니다.")
 
 def main_app():
     sh = init_db()
@@ -256,13 +268,14 @@ def page_recommend(sh):
     movie_recs = st.session_state.get("movie_recs", [])
     
     meta = EMOTION_META.get(emo, EMOTION_META["중립"])
-    st.markdown(f"<div style='text-align: center;'><h2 style='color: {meta['color'].replace('0.6', '1.0')};'>{meta['emoji']} 감정: {emo}</h2></div>", unsafe_allow_html=True)
+    st.markdown(f"<div style='text-align: center;'><h2 style='color: {meta['color']};'>{meta['emoji']} 감정: {emo}</h2></div>", unsafe_allow_html=True)
     
     c1, c2 = st.columns(2, gap="large")
     with c1:
         st.markdown("#### 🎵 추천 음악")
         for item in music_recs:
-            components.iframe(f"https://open.spotify.com/embed/track/{item['id']}?utm_source=generator", height=160)
+            # ⭐️ 음악 부분 크기 조금 더 키움 (200px)
+            components.iframe(f"https://open.spotify.com/embed/track/{item['id']}?utm_source=generator", height=200)
     with c2:
         st.markdown("#### 🎬 추천 영화")
         for item in movie_recs:
@@ -277,25 +290,34 @@ def page_recommend(sh):
             </div>
             """, unsafe_allow_html=True)
 
-# ⭐️ 달력 부분: 칸 꽉 채우기 + 이모지 크기 키우기
+# ⭐️ 달력 부분 수정: 파란색 중복 제거 + 칸 전체 채우기 + 이모지 가운데 정렬
 def page_dashboard(sh):
     st.markdown("## 📅 감정 달력")
     my_diaries = get_user_diaries(sh, st.session_state.username)
     events = []
     for d, data in my_diaries.items():
         meta = EMOTION_META.get(data['emotion'], EMOTION_META["중립"])
-        # display: 'background'를 사용하여 칸 전체 색칠
-        events.append({"start": d, "display": "background", "backgroundColor": meta["color"]})
-        # 이모지 추가
-        events.append({"title": meta["emoji"], "start": d, "allDay": True})
+        # title과 background를 하나의 이벤트로 묶어서 파란색 겹침 방지
+        events.append({
+            "title": meta["emoji"],
+            "start": d,
+            "display": "block", # 'background' 대신 'block' 사용 시 파란 바 안나옴
+            "backgroundColor": meta["color"],
+            "borderColor": meta["color"],
+            "allDay": True
+        })
     
-    calendar(events=events, options={"initialView": "dayGridMonth"}, custom_css="""
-        .fc-event-title { font-size: 2.5em !important; text-align: center; cursor: default; }
-        .fc-daygrid-day-frame { min-height: 100px !important; }
-        .fc-bg-event { opacity: 1.0 !important; }
+    calendar(events=events, options={
+        "initialView": "dayGridMonth",
+        "headerToolbar": {"left": "prev,next today", "center": "title", "right": ""},
+    }, custom_css="""
+        .fc-event-title { font-size: 2.2em !important; display: flex; justify-content: center; align-items: center; height: 100%; cursor: default; }
+        .fc-daygrid-day-frame { min-height: 120px !important; }
+        .fc-event { border-radius: 0px !important; border: none !important; height: 100% !important; }
+        .fc-daygrid-event-harness { height: 100% !important; margin: 0 !important; }
     """)
 
-# ⭐️ 통계 부분: 색상 일치 + 한글 똑바로 (가로형)
+# ⭐️ 통계 부분: 색상 일치 + 한글 똑바로
 def page_stats(sh):
     st.markdown("## 📊 감정 통계")
     diaries = get_user_diaries(sh, st.session_state.username)
@@ -305,13 +327,12 @@ def page_stats(sh):
     counts = df['emotion'].value_counts().reindex(EMOTION_META.keys(), fill_value=0).reset_index()
     counts.columns = ['emotion', 'count']
     
-    # 달력과 동일한 색상 매핑
-    color_range = [m['color'].replace('0.6', '1.0') for m in EMOTION_META.values()]
+    color_range = [m['color'] for m in EMOTION_META.values()]
     
     st.vega_lite_chart(counts, {
         "mark": {"type": "bar", "cornerRadius": 5},
         "encoding": {
-            "x": {"field": "emotion", "type": "nominal", "axis": {"labelAngle": 0}, "sort": list(EMOTION_META.keys())}, # 한글 똑바로
+            "x": {"field": "emotion", "type": "nominal", "axis": {"labelAngle": 0}, "sort": list(EMOTION_META.keys())},
             "y": {"field": "count", "type": "quantitative"},
             "color": {
                 "field": "emotion", 
