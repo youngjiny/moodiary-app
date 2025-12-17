@@ -703,7 +703,7 @@ def page_happy_storage(sh):
     
     # 상단 설명
     text_color = "#555" if not st.session_state.dark_mode else "#bbbbbb"
-    st.markdown(f"<p style='color:{text_color}; font-size:1.1rem;'>내가 '기쁨'을 느꼈던 순간들만 모아봤어요. 🥰</p>", unsafe_allow_html=True)
+    st.markdown(f"<p style='color:{text_color}; font-size:1.1rem;'>다시 찾아올 당신의 봄날을 위해, 행복했던 기억들을 미리 꺼내두었어요. 🌸</p>", unsafe_allow_html=True)
     
     # 데이터 가져오기 및 '기쁨' 필터링
     my_diaries = get_user_diaries(sh, st.session_state.username)
@@ -755,3 +755,4 @@ def page_happy_storage(sh):
 if st.session_state.logged_in: main_app()
 elif st.session_state.page == "intro": intro_page()
 else: login_page()
+
