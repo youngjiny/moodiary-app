@@ -22,7 +22,7 @@ except ImportError:
     SPOTIPY_AVAILABLE = False
 
 # --- 2) 기본 설정 ---
-# 요청하신 대로 모델 버전 6 유지
+# 모델 버전 6 유지
 EMOTION_MODEL_ID = "JUDONGHYEOK/6-emotion-bert-korean-v6-balanced"
 TMDB_BASE_URL = "https://api.themoviedb.org/3"
 GSHEET_DB_NAME = "moodiary_db" 
@@ -43,7 +43,7 @@ KST = timezone(timedelta(hours=9))
 
 st.set_page_config(layout="wide", page_title="MOODIARY", page_icon="💖")
 
-# ⭐️ 커스텀 CSS
+# ⭐️ 커스텀 CSS (사이드바 고정 및 스타일)
 def apply_custom_css():
     is_dark = st.session_state.get("dark_mode", False)
     if is_dark:
@@ -72,7 +72,7 @@ def apply_custom_css():
         .happy-text {{ font-size: 1.4em; font-weight: 600; color: {card_text_happy}; }}
         .animated-title {{ font-size: 3.5rem !important; font-weight: 800; animation: color-shift 5s ease-in-out infinite alternate; }}
         @keyframes color-shift {{ 0% {{ color: #6C5CE7; }} 100% {{ color: #FF7675; }} }}
-        section[data-testid="stSidebar"] {{ min-width: 250px !important; }}
+        section[data-testid="stSidebar"] {{ transform: none !important; visibility: visible !important; min-width: 250px !important; }}
         header, footer {{visibility: hidden;}}
         </style>
     """
@@ -171,8 +171,10 @@ def recommend_music(emotion):
             tracks = sp.playlist_items(pl["id"], limit=20).get("items", [])
             for it in tracks:
                 t = it.get("track")
-                if t and t.get("id"): valid_tracks.append({"id": t["id"], "title": t["name"]})
-            if len(valid_tracks) >= 5: break
+                # ⭐️ 키 에러 방지: 데이터 구조 확인 로직 강화
+                if t and isinstance(t, dict) and t.get("id"):
+                    valid_tracks.append({"id": t["id"], "title": t["name"]})
+            if len(valid_tracks) >= 10: break
             
         return random.sample(valid_tracks, min(3, len(valid_tracks))) if valid_tracks else []
     except: return []
@@ -186,6 +188,7 @@ def recommend_movies(emotion):
             "with_genres": GENRES.get(emotion, "18"), "page": random.randint(1, 3), "vote_count.gte": 300
         }, timeout=5)
         results = r.json().get("results", [])
+        if not results: return []
         picks = random.sample(results, min(3, len(results)))
         return [{"title": m["title"], "year": (m.get("release_date") or "")[:4], "rating": m["vote_average"], "overview": m["overview"], "poster": f"https://image.tmdb.org/t/p/w500{m['poster_path']}" if m.get("poster_path") else None} for m in picks]
     except: return []
@@ -215,7 +218,7 @@ def login_page():
             lid, lpw = st.text_input("아이디", key="lid"), st.text_input("비밀번호", type="password", key="lpw")
             if st.button("로그인", use_container_width=True):
                 users = get_all_users(sh)
-                if lid in users and users[lid] == lpw:
+                if lid in users and users[lid] == str(lpw):
                     st.session_state.logged_in, st.session_state.username = True, lid
                     st.session_state.page = "dashboard"; st.rerun()
                 else: st.error("정보 불일치")
@@ -231,13 +234,13 @@ def main_app():
     with st.sidebar:
         st.markdown(f"### 👋 **{st.session_state.username}**님")
         st.session_state.dark_mode = st.checkbox("🌙 야간 모드", value=st.session_state.dark_mode)
-        if st.button("📝 일기 작성"): st.session_state.page = "write"; st.rerun()
-        if st.button("📅 감정 달력"): st.session_state.page = "dashboard"; st.rerun()
-        if st.button("🎵 추천 보기"): st.session_state.page = "result"; st.rerun()
-        if st.button("📊 통계 보기"): st.session_state.page = "stats"; st.rerun()
-        if st.button("📂 행복 저장소"): st.session_state.page = "happy"; st.rerun()
+        if st.button("📝 일기 작성", key="side_write"): st.session_state.page = "write"; st.rerun()
+        if st.button("📅 감정 달력", key="side_dash"): st.session_state.page = "dashboard"; st.rerun()
+        if st.button("🎵 추천 보기", key="side_rec"): st.session_state.page = "result"; st.rerun()
+        if st.button("📊 통계 보기", key="side_stats"): st.session_state.page = "stats"; st.rerun()
+        if st.button("📂 행복 저장소", key="side_happy"): st.session_state.page = "happy"; st.rerun()
         st.divider()
-        if st.button("🚪 로그아웃"): st.session_state.logged_in = False; st.session_state.page = "intro"; st.rerun()
+        if st.button("🚪 로그아웃", key="side_logout"): st.session_state.logged_in = False; st.session_state.page = "intro"; st.rerun()
 
     if st.session_state.page == "write": page_write(sh)
     elif st.session_state.page == "dashboard": page_dashboard(sh)
@@ -249,12 +252,12 @@ def page_write(sh):
     st.markdown("## 📝 오늘의 이야기")
     model, tokenizer, device, id2label = load_emotion_model()
     txt = st.text_area("오늘 하루는 어땠나요?", height=300, key="diary_input_box")
-    if st.button("🔍 분석 및 저장", type="primary"):
+    if st.button("🔍 분석 및 저장", type="primary", key="save_diary"):
         if not txt.strip(): st.warning("내용을 입력하세요."); return
         with st.spinner("감정 분석 중..."):
             emo, sc = analyze_diary(txt, model, tokenizer, device, id2label)
-            # 추천 데이터 즉시 생성 후 세션 저장
             st.session_state.final_emotion = emo
+            # 추천 데이터 미리 생성
             st.session_state.music_recs = recommend_music(emo)
             st.session_state.movie_recs = recommend_movies(emo)
             add_diary(sh, st.session_state.username, datetime.now(KST).strftime("%Y-%m-%d"), emo, txt)
@@ -262,22 +265,19 @@ def page_write(sh):
 
 def page_recommend(sh):
     st.markdown("## 🎵 음악/영화 추천")
-    # 세션 데이터 부재 시 자동 복구 로직
+    
     if "final_emotion" not in st.session_state:
         diaries = get_user_diaries(sh, st.session_state.username)
         today = datetime.now(KST).strftime("%Y-%m-%d")
-        if today in diaries:
-            st.session_state.final_emotion = diaries[today]['emotion']
-        else:
-            st.info("오늘의 일기를 먼저 작성해주세요."); return
+        if today in diaries: st.session_state.final_emotion = diaries[today]['emotion']
+        else: st.info("오늘의 일기를 먼저 작성해주세요."); return
 
     emo = st.session_state.final_emotion
-    # 추천 데이터가 비어있을 경우 재로딩
-    if not st.session_state.get("music_recs") or not st.session_state.get("movie_recs"):
-        with st.spinner("추천 데이터를 불러오는 중..."):
-            st.session_state.music_recs = recommend_music(emo)
-            st.session_state.movie_recs = recommend_movies(emo)
-            st.rerun()
+    # ⭐️ 안전 장치: 데이터가 불완전하면 재로딩
+    if not st.session_state.get("music_recs") or not isinstance(st.session_state.music_recs, list):
+        st.session_state.music_recs = recommend_music(emo)
+    if not st.session_state.get("movie_recs") or not isinstance(st.session_state.movie_recs, list):
+        st.session_state.movie_recs = recommend_movies(emo)
 
     meta = EMOTION_META.get(emo, EMOTION_META["중립"])
     st.markdown(f"<div style='text-align: center; padding: 1rem;'><h2 style='color: {meta['color'].replace('0.6', '1.0')};'>{meta['emoji']} 감정: {emo}</h2><p>{meta['desc']}</p></div>", unsafe_allow_html=True)
@@ -285,19 +285,31 @@ def page_recommend(sh):
     c1, c2 = st.columns(2)
     with c1:
         st.markdown("#### 🎵 추천 음악")
-        if st.button("🔄 음악 새로고침"):
+        if st.button("🔄 음악 새로고침", key="ref_mu"):
             st.session_state.music_recs = recommend_music(emo); st.rerun()
-        for item in st.session_state.get("music_recs", []):
-            components.iframe(f"https://open.spotify.com/embed/track/{item['id']}?utm_source=generator", height=100)
+        
+        music_list = st.session_state.get("music_recs", [])
+        if music_list:
+            for item in music_list:
+                # ⭐️ KeyError 해결: 'id'가 있는지 확실히 확인 후 실행
+                if isinstance(item, dict) and 'id' in item:
+                    components.iframe(f"https://open.spotify.com/embed/track/{item['id']}?utm_source=generator", height=100)
+        else: st.write("추천 음악을 불러오지 못했습니다.")
+
     with c2:
         st.markdown("#### 🎬 추천 영화")
-        if st.button("🔄 영화 새로고침"):
+        if st.button("🔄 영화 새로고침", key="ref_mo"):
             st.session_state.movie_recs = recommend_movies(emo); st.rerun()
-        for item in st.session_state.get("movie_recs", []):
-            with st.container():
-                ic, tc = st.columns([1, 2])
-                if item['poster']: ic.image(item['poster'], use_container_width=True)
-                tc.markdown(f"**{item['title']}** ({item['year']})\n⭐ {item['rating']}")
+        
+        movie_list = st.session_state.get("movie_recs", [])
+        if movie_list:
+            for item in movie_list:
+                if isinstance(item, dict) and 'title' in item:
+                    with st.container():
+                        ic, tc = st.columns([1, 2])
+                        if item.get('poster'): ic.image(item['poster'], use_container_width=True)
+                        tc.markdown(f"**{item['title']}** ({item.get('year','')})\n⭐ {item.get('rating','')}")
+        else: st.write("추천 영화가 없습니다.")
 
 def page_dashboard(sh):
     st.markdown("## 📅 감정 달력")
@@ -307,7 +319,7 @@ def page_dashboard(sh):
         meta = EMOTION_META.get(data['emotion'], EMOTION_META["중립"])
         events.append({"title": meta["emoji"], "start": d, "backgroundColor": meta["color"], "borderColor": "transparent"})
     calendar(events=events, options={"initialView": "dayGridMonth"})
-    if st.button("✏️ 오늘 일기 쓰기"): st.session_state.page = "write"; st.rerun()
+    if st.button("✏️ 오늘 일기 쓰기", key="go_write"): st.session_state.page = "write"; st.rerun()
 
 def page_stats(sh):
     st.markdown("## 📊 감정 통계")
