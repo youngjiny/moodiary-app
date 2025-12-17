@@ -166,9 +166,10 @@ def apply_custom_css():
         .animated-title {{ font-size: 3.5rem !important; font-weight: 800; animation: color-shift 5s ease-in-out infinite alternate; }}
 
     
-        header {visibility: visible;}
-        footer {visibility: hidden;}
-    """
+        header {{visibility: visible;}} 
+        footer {{visibility: hidden;}}
+        </style>
+"""
     st.markdown(css, unsafe_allow_html=True)
 
 # =========================================
@@ -747,3 +748,4 @@ def page_happy_storage(sh):
 if st.session_state.logged_in: main_app()
 elif st.session_state.page == "intro": intro_page()
 else: login_page()
+
