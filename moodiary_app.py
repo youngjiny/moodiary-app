@@ -747,4 +747,3 @@ def page_happy_storage(sh):
 if st.session_state.logged_in: main_app()
 elif st.session_state.page == "intro": intro_page()
 else: login_page()
-
