@@ -27,6 +27,7 @@ TMDB_BASE_URL = "https://api.themoviedb.org/3"
 GSHEET_DB_NAME = "moodiary_db" 
 EMERGENCY_TMDB_KEY = "8587d6734fd278ecc05dcbe710c29f9c"
 
+# 감정별 메타 데이터 (달력 및 통계용)
 EMOTION_META = {
     "기쁨": {"color": "#FFD700", "emoji": "😆", "desc": "웃음이 끊이지 않는 하루!"},
     "분노": {"color": "#FF5050", "emoji": "🤬", "desc": "워워, 진정이 필요해요."},
@@ -37,51 +38,108 @@ EMOTION_META = {
 }
 
 KST = timezone(timedelta(hours=9))
+
 st.set_page_config(layout="wide", page_title="MOODIARY", page_icon="💖")
 
-# --- 3) 커스텀 CSS ---
+# --- 3) 커스텀 CSS (이미지 스타일 및 달력 수정) ---
 def apply_custom_css():
     is_dark = st.session_state.get("dark_mode", False)
-    primary_purple = "#7B61FF"
+    primary_purple = "#7B61FF"  # 이미지의 메인 보라색
     
-    bg_color = "#121212" if is_dark else "#F8F9FA"
-    main_bg = "rgba(40, 40, 40, 0.95)" if is_dark else "rgba(255, 255, 255, 1.0)"
-    text_color = "#f0f0f0" if is_dark else "#333333"
-    card_bg = "#3a3a3a" if is_dark else "#ffffff"
+    if is_dark:
+        bg_color = "#121212"
+        main_bg = "rgba(40, 40, 40, 0.95)"
+        text_color = "#f0f0f0"
+        card_bg = "#3a3a3a"
+    else:
+        bg_color = "#F8F9FA"
+        main_bg = "rgba(255, 255, 255, 1.0)"
+        text_color = "#333333"
+        card_bg = "#ffffff"
 
     css = f"""
         <style>
         @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;700;900&display=swap');
         html, body, [class*="css"] {{ font-family: 'Noto Sans KR', sans-serif; }}
+        
+        /* 배경 설정 */
         .stApp {{ background-color: {bg_color}; }}
+        
+        /* 메인 컨테이너 (중앙 정렬 및 라운딩) */
         .block-container {{ 
-            background: {main_bg}; border-radius: 30px; padding: 4rem !important; 
-            box-shadow: 0 10px 40px rgba(0,0,0,0.05); margin-top: 2rem; max-width: 900px;
+            background: {main_bg}; 
+            border-radius: 30px; 
+            padding: 4rem !important; 
+            box-shadow: 0 10px 40px rgba(0,0,0,0.05);
+            margin-top: 2rem;
+            max-width: 900px;
         }}
-        .main-title {{ font-size: 4.5rem !important; font-weight: 900 !important; color: {primary_purple}; text-align: center; }}
-        .main-subtitle {{ font-size: 1.6rem; font-weight: 700; color: #333333; text-align: center; margin-bottom: 3rem; }}
+
+        /* 이미지 스타일 타이틀 */
+        .main-title {{
+            font-size: 4.5rem !important;
+            font-weight: 900 !important;
+            color: {primary_purple};
+            margin-bottom: 0.5rem;
+            letter-spacing: -2px;
+            text-align: center;
+        }}
+        .main-subtitle {{
+            font-size: 1.6rem;
+            font-weight: 700;
+            color: #333333;
+            margin-bottom: 3rem;
+            text-align: center;
+        }}
+
+        /* 이미지 속 보라색 라운드 버튼 */
         div.stButton > button {{
-            background-color: {primary_purple} !important; color: white !important;
-            border-radius: 50px !important; padding: 0.7rem 2.5rem !important; border: none !important;
+            background-color: {primary_purple} !important;
+            color: white !important;
+            border-radius: 50px !important;
+            padding: 0.7rem 2.5rem !important;
+            font-size: 1.1rem !important;
+            font-weight: 600 !important;
+            border: none !important;
+            transition: all 0.3s ease;
+            box-shadow: 0 4px 15px rgba(123, 97, 255, 0.3) !important;
+            width: auto;
+            margin: 0 auto;
+            display: block;
         }}
-        /* 행복 저장소 일자별 카드 디자인 */
-        .happy-list-item {{
-            background: {card_bg}; border-left: 5px solid #FFD700; border-radius: 15px;
-            padding: 20px; margin-bottom: 15px; box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+        div.stButton > button:hover {{
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(123, 97, 255, 0.4) !important;
+            background-color: #6649FF !important;
         }}
-        .happy-date-label {{ font-weight: 700; color: {primary_purple}; font-size: 0.9rem; margin-bottom: 5px; }}
-        .happy-content-text {{ font-size: 1.1rem; line-height: 1.6; color: {text_color}; }}
-        .month-header {{ 
-            font-size: 1.5rem; font-weight: 900; color: {text_color}; 
-            margin: 30px 0 15px 5px; border-bottom: 2px solid #eee; padding-bottom: 5px;
+
+        /* 달력 커스텀 (칸 전체 채우기 및 이모지 중앙화) */
+        .fc-daygrid-day-frame {{ min-height: 120px !important; cursor: pointer; }}
+        .fc-bg-event {{ opacity: 1.0 !important; border-radius: 5px; }}
+        .fc-event-title {{ 
+            font-size: 2.5em !important; 
+            text-align: center; 
+            display: flex; 
+            justify-content: center; 
+            align-items: center; 
+            height: 90px;
         }}
+        
+        /* 영화 카드 */
+        .movie-card {{
+            background: {card_bg};
+            border-radius: 15px; padding: 15px; margin-bottom: 20px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1); display: flex; gap: 15px;
+        }}
+        .movie-card img {{ width: 110px; border-radius: 10px; object-fit: cover; }}
+        
+        /* 사이드바 보이지 않게 처리 (인트로/로그인 시) */
         { 'section[data-testid="stSidebar"] { display: none; }' if st.session_state.page in ["intro", "login"] else '' }
         </style>
     """
     st.markdown(css, unsafe_allow_html=True)
 
-# --- 4) DB 및 AI 로직 (생략/유지) ---
-# ... (기존 제공해주신 get_gsheets_client, init_db, analyze_diary 등 모든 함수 동일하게 유지) ...
+# --- 4) DB 및 AI 로직 (기존 로직 유지) ---
 @st.cache_resource
 def get_gsheets_client():
     try:
@@ -168,7 +226,7 @@ def recommend_movies(emotion):
         return [{"title": m["title"], "year": (m.get("release_date") or "")[:4], "rating": m["vote_average"], "overview": m["overview"], "poster": f"https://image.tmdb.org/t/p/w500{m['poster_path']}" if m.get("poster_path") else None} for m in picks]
     except: return []
 
-# --- 5) 메인 페이지 로직 ---
+# --- 5) 각 페이지 구현 ---
 
 if "logged_in" not in st.session_state: st.session_state.logged_in = False
 if "page" not in st.session_state: st.session_state.page = "intro" 
@@ -181,13 +239,15 @@ def intro_page():
     st.markdown("<div class='main-title'>MOODIARY</div>", unsafe_allow_html=True)
     st.markdown("<div class='main-subtitle'>오늘 당신의 마음은 어떤가요?</div>", unsafe_allow_html=True)
     if st.button("✨ 내 마음 기록하러 가기"):
-        st.session_state.page = "login"; st.rerun()
+        st.session_state.page = "login"
+        st.rerun()
 
 def login_page():
     sh = init_db()
     st.markdown("<div class='main-title' style='font-size: 3rem !important;'>MOODIARY</div>", unsafe_allow_html=True)
     tab1, tab2 = st.tabs(["🔑 로그인", "📝 회원가입"])
     if not sh: st.error("DB 연결 실패"); return
+    
     with tab1:
         lid = st.text_input("아이디", key="l_id")
         lpw = st.text_input("비밀번호", type="password", key="l_pw")
@@ -197,6 +257,7 @@ def login_page():
                 st.session_state.logged_in, st.session_state.username = True, lid
                 st.session_state.page = "dashboard"; st.rerun()
             else: st.error("정보가 올바르지 않습니다.")
+            
     with tab2:
         nid = st.text_input("새 아이디", key="n_id")
         npw = st.text_input("새 비밀번호 (4자리)", type="password", max_chars=4, key="n_pw")
@@ -240,6 +301,7 @@ def page_recommend(sh):
     emo = st.session_state.get("final_emotion", "중립")
     meta = EMOTION_META.get(emo, EMOTION_META["중립"])
     st.markdown(f"<h1 style='text-align:center;'>{meta['emoji']} 오늘의 감정은 <span style='color:{meta['color']}'>{emo}</span></h1>", unsafe_allow_html=True)
+    
     c1, c2 = st.columns(2)
     with c1:
         st.markdown("#### 🎵 추천 음악")
@@ -256,8 +318,18 @@ def page_dashboard(sh):
     events = []
     for d, data in my_diaries.items():
         meta = EMOTION_META.get(data['emotion'], EMOTION_META["중립"])
+        # 배경색 이벤트 (칸 전체 색칠)
         events.append({"start": d, "display": "background", "backgroundColor": meta["color"]})
-        events.append({"title": meta["emoji"], "start": d, "allDay": True, "backgroundColor": "rgba(0,0,0,0)", "borderColor": "rgba(0,0,0,0)", "textColor": "#000"})
+        # 이모지 이벤트 (중앙 표시, 투명 배경으로 파란 선 방지)
+        events.append({
+            "title": meta["emoji"], 
+            "start": d, 
+            "allDay": True,
+            "backgroundColor": "rgba(0,0,0,0)", 
+            "borderColor": "rgba(0,0,0,0)",
+            "textColor": "#000"
+        })
+    
     calendar(events=events, options={"initialView": "dayGridMonth", "locale": "ko"})
 
 def page_stats(sh):
@@ -277,37 +349,13 @@ def page_stats(sh):
         }
     }, use_container_width=True)
 
-# 📂 행복 저장소 수정 (일자별 최신순 나열)
 def page_happy_storage(sh):
     st.markdown("## 📂 행복 저장소")
-    st.markdown("<p style='color:#777; margin-bottom:2rem;'>내가 '기쁨'을 느꼈던 소중한 순간들을 모아보았습니다. ✨</p>", unsafe_allow_html=True)
-    
     diaries = get_user_diaries(sh, st.session_state.username)
-    # '기쁨' 감정만 필터링하여 날짜 역순(최신순) 정렬
-    happy_list = sorted([(date, d['text']) for date, d in diaries.items() if d['emotion'] == "기쁨"], reverse=True)
-    
-    if not happy_list:
-        st.info("아직 기쁜 순간이 기록되지 않았습니다. 오늘의 행복을 기록해보세요!")
-        return
-
-    current_month = ""
-    for date, text in happy_list:
-        # 날짜에서 '년-월' 추출 (예: 2023-10)
-        month_label = date[:7] 
-        
-        # 월이 바뀌면 월 헤더 출력
-        if month_label != current_month:
-            current_month = month_label
-            year, month = month_label.split('-')
-            st.markdown(f"<div class='month-header'>{year}년 {month}월</div>", unsafe_allow_html=True)
-        
-        # 일자별 카드 출력
-        st.markdown(f"""
-            <div class='happy-list-item'>
-                <div class='happy-date-label'>{date}</div>
-                <div class='happy-content-text'>{text}</div>
-            </div>
-        """, unsafe_allow_html=True)
+    happy_list = [(date, d['text']) for date, d in diaries.items() if d['emotion'] == "기쁨"]
+    if not happy_list: st.info("아직 기쁜 기록이 없네요."); return
+    for date, text in sorted(happy_list, reverse=True):
+        st.info(f"📅 **{date}**\n\n{text}")
 
 # --- 6) 라우팅 ---
 if st.session_state.logged_in: main_app()
