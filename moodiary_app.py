@@ -58,7 +58,7 @@ def apply_custom_css():
         secondary_text = "#bbbbbb"  
         sidebar_bg = "#1e1e1e"
         menu_checked = "#A29BFE"
-        card_bg = "#3a3a3a"          
+        card_bg = "#3a3a3a"           
         card_text_happy = "#ffffff" 
         stat_card_line = "1px solid #444444" 
     else:
@@ -139,8 +139,8 @@ def apply_custom_css():
         .happy-card {{
             background: {card_bg}; border-left: 6px solid #FFD700;
             padding: 25px; border-radius: 20px; box-shadow: 0 4px 10px rgba(0,0,0,0.1);
-            margin-bottom: 15px;
-            height: auto;
+            margin-bottom: 20px;
+            width: 100%;
         }}
         .happy-date {{ color: {main_text}; font-weight: 700; margin-bottom: 12px; }}
         .happy-text {{ font-size: 1.4em; font-weight: 600; line-height: 1.5; color: {card_text_happy}; }}
@@ -701,47 +701,55 @@ def page_stats(sh):
 def page_happy_storage(sh):
     st.markdown("## 📂 행복 저장소")
     
+    # 상단 설명
     text_color = "#555" if not st.session_state.dark_mode else "#bbbbbb"
-    st.markdown(f"<p style='color:{text_color};'>내가 '기쁨'을 느꼈던 순간들만 모아봤어요. 🥰</p>", unsafe_allow_html=True)
+    st.markdown(f"<p style='color:{text_color}; font-size:1.1rem;'>내가 '기쁨'을 느꼈던 순간들만 모아봤어요. 🥰</p>", unsafe_allow_html=True)
     
+    # 데이터 가져오기 및 '기쁨' 필터링
     my_diaries = get_user_diaries(sh, st.session_state.username)
     happy_moments = {date: data for date, data in my_diaries.items() if data['emotion'] == '기쁨'}
     
     if not happy_moments:
         st.info("아직 기록된 기쁨의 순간이 없어요.")
     else:
-        dates = sorted(happy_moments.keys(), reverse=True)
-        for i in range(0, len(dates), 2):
-            cols = st.columns(2, gap="large") 
-            date1 = dates[i]
-            data1 = happy_moments[date1]
-            with cols[0]:
+        # 월별 필터를 위한 선택창
+        dates_all = sorted(happy_moments.keys(), reverse=True)
+        years = sorted(list(set([d.split("-")[0] for d in dates_all])), reverse=True)
+        
+        c1, c2 = st.columns([0.3, 0.7])
+        with c1:
+            sel_year = st.selectbox("연도 선택", years, key="happy_sel_year")
+            months = sorted(list(set([d.split("-")[1] for d in dates_all if d.startswith(sel_year)])), reverse=True)
+            sel_month = st.selectbox("월 선택", months, key="happy_sel_month")
+            
+        target_prefix = f"{sel_year}-{sel_month}"
+        filtered_dates = [d for d in dates_all if d.startswith(target_prefix)]
+        
+        st.write("") # 간격
+        
+        if not filtered_dates:
+            st.warning(f"{sel_year}년 {sel_month}월에는 기쁨의 기록이 없네요.")
+        else:
+            # 한 줄에 하나씩(Full Width) 출력
+            for date in filtered_dates:
+                data = happy_moments[date]
                 st.markdown(f"""
                 <div class="happy-card">
-                    <div class="happy-date">{date1} {EMOTION_META['기쁨']['emoji']}</div>
-                    <div class="happy-text">{data1['text']}</div>
+                    <div class="happy-date">{date} {EMOTION_META['기쁨']['emoji']}</div>
+                    <div class="happy-text">{data['text']}</div>
                 </div>
                 """, unsafe_allow_html=True)
-            
-            if i + 1 < len(dates):
-                date2 = dates[i+1]
-                data2 = happy_moments[date2]
-                with cols[1]:
-                    st.markdown(f"""
-                    <div class="happy-card">
-                        <div class="happy-date">{date2} {EMOTION_META['기쁨']['emoji']}</div>
-                        <div class="happy-text">{data2['text']}</div>
-                    </div>
-                    """, unsafe_allow_html=True)
 
     st.divider()
     b1, b2 = st.columns(2)
     with b1:
-        # ⭐️ 달력 보기 버튼: 상태 변경 및 rerun 명시
-        if st.button("📅 달력 보기", use_container_width=True, key="happy_cal"): st.session_state.page = "dashboard"; st.rerun()
+        if st.button("📅 달력 보기", use_container_width=True, key="happy_cal"): 
+            st.session_state.page = "dashboard"
+            st.rerun()
     with b2:
-        # ⭐️ 통계 보기 버튼: 상태 변경 및 rerun 명시
-        if st.button("📊 통계 보러가기", use_container_width=True, key="happy_stats"): st.session_state.page = "stats"; st.rerun()
+        if st.button("📊 통계 보러가기", use_container_width=True, key="happy_stats"): 
+            st.session_state.page = "stats"
+            st.rerun()
 
 # --- 메인 실행 로직 ---
 if st.session_state.logged_in: main_app()
